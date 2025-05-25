@@ -47,7 +47,7 @@ while True:
         scale_value(accel['x'], -2, 2),       # Accel x: -2 to 2g
         scale_value(accel['y'], -2, 2),       # Accel y: -2 to 2g
         scale_value(accel['z'], -2, 2),       # Accel z: -2 to 2g
-        scale_value(gyro['yaw'], -10, 10),    # Gyro yaw: -10 to 10 rad/s
+        scale_value(gyro['z'], -10, 10),      # Gyro yaw (z-axis): -10 to 10 rad/s
         scale_value(mag_magnitude, 0, 100)    # Mag magnitude: 0-100 uT
     ]
 
