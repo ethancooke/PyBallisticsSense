@@ -26,6 +26,12 @@ def scale_value(value, min_val, max_val):
     scaled = (value - min_val) / (max_val - min_val) * 8
     return int(round(scaled))
 
+# Function to format and print sensor data
+def print_sensor_data(temperature, humidity, pressure, accel, gyro_z, mag_magnitude):
+    print(f"\rTemp: {temperature:.1f}°C, Humidity: {humidity:.1f}%, Pressure: {pressure:.1f}mbar, "
+          f"Accel (x,y,z): ({accel['x']:.2f}, {accel['y']:.2f}, {accel['z']:.2f})g, "
+          f"Gyro Z: {gyro_z:.2f}rad/s, Mag: {mag_magnitude:.1f}uT", end='')
+
 # Main loop
 while True:
     # Get sensor readings
@@ -38,6 +44,9 @@ while True:
 
     # Calculate magnetometer magnitude
     mag_magnitude = math.sqrt(mag['x']**2 + mag['y']**2 + mag['z']**2)
+
+    # Print sensor data to console (overwrites previous line)
+    print_sensor_data(temperature, humidity, pressure, accel, gyro['z'], mag_magnitude)
 
     # Scale sensor values to 0-8
     sensor_values = [
