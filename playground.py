@@ -18,6 +18,18 @@ colors = [
     [128, 128, 128] # Gray for mag_magnitude
 ]
 
+# Color names for console output
+color_names = [
+    "Red",      # Temperature
+    "Green",    # Humidity
+    "Blue",     # Pressure
+    "Yellow",   # Accel_x
+    "Magenta",  # Accel_y
+    "Cyan",     # Accel_z
+    "Orange",   # Gyro_yaw
+    "Gray"      # Mag_magnitude
+]
+
 # Function to scale sensor value to 0-8 range for LED display
 def scale_value(value, min_val, max_val):
     # Ensure value is within bounds
@@ -26,11 +38,16 @@ def scale_value(value, min_val, max_val):
     scaled = (value - min_val) / (max_val - min_val) * 8
     return int(round(scaled))
 
-# Function to format and print sensor data
+# Function to format and print sensor data with colors
 def print_sensor_data(temperature, humidity, pressure, accel, gyro_z, mag_magnitude):
-    print(f"\rTemp: {temperature:.1f}°C, Humidity: {humidity:.1f}%, Pressure: {pressure:.1f}mbar, "
-          f"Accel (x,y,z): ({accel['x']:.2f}, {accel['y']:.2f}, {accel['z']:.2f})g, "
-          f"Gyro Z: {gyro_z:.2f}rad/s, Mag: {mag_magnitude:.1f}uT", end='')
+    print(f"\rTemp ({color_names[0]}): {temperature:.1f}°C, "
+          f"Humidity ({color_names[1]}): {humidity:.1f}%, "
+          f"Pressure ({color_names[2]}): {pressure:.1f}mbar, "
+          f"Accel X ({color_names[3]}): {accel['x']:.2f}g, "
+          f"Accel Y ({color_names[4]}): {accel['y']:.2f}g, "
+          f"Accel Z ({color_names[5]}): {accel['z']:.2f}g, "
+          f"Gyro Z ({color_names[6]}): {gyro_z:.2f}rad/s, "
+          f"Mag ({color_names[7]}): {mag_magnitude:.1f}uT", end='')
 
 # Main loop
 while True:
@@ -45,7 +62,7 @@ while True:
     # Calculate magnetometer magnitude
     mag_magnitude = math.sqrt(mag['x']**2 + mag['y']**2 + mag['z']**2)
 
-    # Print sensor data to console (overwrites previous line)
+    # Print sensor data to console with colors (overwrites previous line)
     print_sensor_data(temperature, humidity, pressure, accel, gyro['z'], mag_magnitude)
 
     # Scale sensor values to 0-8
