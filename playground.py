@@ -38,8 +38,23 @@ def scale_value(value, min_val, max_val):
     scaled = (value - min_val) / (max_val - min_val) * 8
     return int(round(scaled))
 
-# Function to format and print sensor data with colors
-def print_sensor_data(temperature, humidity, pressure, accel, gyro_z, mag_magnitude):
+# Function to apply vertical and horizontal flips to pixel array
+def apply_flips(pixels, flip_h, flip_v):
+    new_pixels = pixels.copy()
+    # Convert 1D array (64 pixels) to 2D 8x8 array
+    grid = [new_pixels[i:i+8] for i in range(0, 64, 8)]
+    # Apply horizontal flip
+    if flip_h:
+        grid = [row[::-1] for row in grid]
+    # Apply vertical flip
+    if flip_v:
+        grid = grid[::-1]
+    # Flatten back to 1D array
+    return [pixel for row in grid for pixel in row]
+
+# Function to format and print sensor data with colors and orientation
+def print_sensor_data(temperature, humidity, pressure, accel, gyro_z, mag_magnitude, rotation, flip_h, flip_v):
+    orientation = f"Rotation: {rotation}°, Flip H: {'On' if flip_h else 'Off'}, Flip V: {'On' if flip_v else 'Off'}"
     print(f"\rTemp ({color_names[0]}): {temperature:.1f}°C, "
           f"Humidity ({color_names[1]}): {humidity:.1f}%, "
           f"Pressure ({color_names[2]}): {pressure:.1f}mbar, "
@@ -47,10 +62,33 @@ def print_sensor_data(temperature, humidity, pressure, accel, gyro_z, mag_magnit
           f"Accel Y ({color_names[4]}): {accel['y']:.2f}g, "
           f"Accel Z ({color_names[5]}): {accel['z']:.2f}g, "
           f"Gyro Z ({color_names[6]}): {gyro_z:.2f}rad/s, "
-          f"Mag ({color_names[7]}): {mag_magnitude:.1f}uT", end='')
+          f"Mag ({color_names[7]}): {mag_magnitude:.1f}uT, "
+          f"{orientation}", end='')
+
+# Initialize orientation state
+rotation = 0  # 0, 90, 180, 270 degrees
+flip_h = False  # Horizontal flip
+flip_v = False  # Vertical flip
 
 # Main loop
 while True:
+    # Handle joystick events
+    for event in sense.stick.get_events():
+        if event.action == "pressed":
+            if event.direction == "up":
+                flip_v = not flip_v  # Toggle vertical flip
+            elif event.direction == "down":
+                flip_v = not flip_v  # Toggle vertical flip (same as up for simplicity)
+            elif event.direction == "left":
+                flip_h = not flip_h  # Toggle horizontal flip
+            elif event.direction == "right":
+                flip_h = not flip_h  # Toggle horizontal flip (same as left)
+            elif event.direction == "middle":
+                # Reset orientation
+                rotation = 0
+                flip_h = False
+                flip_v = False
+
     # Get sensor readings
     temperature = sense.get_temperature()  # in Celsius (0 to 50 typical)
     humidity = sense.get_humidity()        # in % (0 to 100)
@@ -62,8 +100,8 @@ while True:
     # Calculate magnetometer magnitude
     mag_magnitude = math.sqrt(mag['x']**2 + mag['y']**2 + mag['z']**2)
 
-    # Print sensor data to console with colors (overwrites previous line)
-    print_sensor_data(temperature, humidity, pressure, accel, gyro['z'], mag_magnitude)
+    # Print sensor data to console with colors and orientation
+    print_sensor_data(temperature, humidity, pressure, accel, gyro['z'], mag_magnitude, rotation, flip_h, flip_v)
 
     # Scale sensor values to 0-8
     sensor_values = [
@@ -85,6 +123,12 @@ while True:
         # Create row: light up LEDs up to sensor value
         row_pixels = [color if col < sensor_val else [0, 0, 0] for col in range(8)]
         pixels.extend(row_pixels)
+
+    # Apply horizontal and vertical flips
+    pixels = apply_flips(pixels, flip_h, flip_v)
+
+    # Set rotation
+    sense.set_rotation(rotation)
 
     # Update LED matrix
     sense.set_pixels(pixels)
