@@ -13,13 +13,11 @@ sense.clear()
 # Ballistic calculation functions
 def atmosphere_correction(bc, temp_c, humidity, pressure_inhg, altitude_ft):
     """Adjust ballistic coefficient for environmental conditions."""
-    # Standard conditions: 59°F (15°C), 0% humidity, 29.92 inHg, sea level
     temp_k = temp_c + 273.15
     std_temp_k = 15 + 273.15
-    # Adjust pressure for altitude if sensor data is unavailable
     if pressure_inhg == 29.92 and altitude_ft != 0:
-        pressure_inhg = 29.92 * math.exp(-altitude_ft / 30000)  # Approximate pressure decrease
-    pressure_pa = pressure_inhg * 3386.39  # Convert inHg to Pa
+        pressure_inhg = 29.92 * math.exp(-altitude_ft / 30000)
+    pressure_pa = pressure_inhg * 3386.39
     air_density = (pressure_pa / (287.05 * temp_k)) * (1 - 0.0065 * temp_c / 288.15) ** 4.255
     std_air_density = (101325 / (287.05 * std_temp_k)) * (1 - 0.0065 * 15 / 288.15) ** 4.255
     density_factor = std_air_density / air_density
@@ -28,15 +26,14 @@ def atmosphere_correction(bc, temp_c, humidity, pressure_inhg, altitude_ft):
     return corrected_bc, pressure_inhg
 
 def calculate_spin_drift(bullet_weight_grains, barrel_twist_in, range_yards, velocity_fps):
-    """Calculate spin drift (lateral drift due to bullet spin)."""
+    """Calculate spin drift."""
     bullet_mass_kg = bullet_weight_grains / 7000 * 0.453592
     range_m = range_yards * 0.9144
     velocity_ms = velocity_fps * 0.3048
-    # Simplified spin drift (Litz approximation)
-    twist_rate = 1 / barrel_twist_in  # Revolutions per inch
-    spin_velocity = velocity_ms * twist_rate * 0.0254  # Angular velocity (rad/s)
+    twist_rate = 1 / barrel_twist_in
+    spin_velocity = velocity_ms * twist_rate * 0.0254
     drift_m = 1.25 * (bullet_mass_kg / 0.01) * (range_m / 1000) ** 2 / (velocity_ms / 300) * (twist_rate / 0.1)
-    return drift_m * 39.3701  # Convert to inches
+    return drift_m * 39.3701
 
 def calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, range_yards):
     """Calculate lateral drift due to wind."""
@@ -50,8 +47,7 @@ def calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, ran
 
 def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, zero_range_yards, scope_height_in, temp_c, humidity, pressure_inhg, altitude_ft, target_angle_deg, drag_model, wind_speed_mph, wind_direction_deg, barrel_twist_in):
     """Calculate bullet drop, velocity, energy, and scope adjustments."""
-    # Convert inputs
-    velocity = velocity_fps * 0.3048  # fps to m/s
+    velocity = velocity_fps * 0.3048
     range_m = range_yards * 0.9144
     zero_range_m = zero_range_yards * 0.9144
     scope_height_m = scope_height_in * 0.0254
@@ -59,35 +55,27 @@ def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, ze
     bullet_area = 0.000506707  # Approx. for .308 bullet
     target_angle_rad = math.radians(target_angle_deg)
 
-    # Adjust BC and pressure for environment
     corrected_bc, adjusted_pressure = atmosphere_correction(bc, temp_c, humidity, pressure_inhg, altitude_ft)
-
-    # Drag model coefficients
-    drag_coeff = 0.5 if drag_model == "G1" else 0.25  # G7 lower drag
+    drag_coeff = 0.5 if drag_model == "G1" else 0.25
     air_density = (adjusted_pressure * 3386.39) / (287.05 * (temp_c + 273.15))
 
-    # Time of flight
     time_of_flight = range_m / velocity
     velocity_at_range = velocity * math.exp(-drag_coeff * air_density * bullet_area * range_m / (2 * bullet_mass * corrected_bc))
     time_of_flight = range_m / ((velocity + velocity_at_range) / 2)
 
-    # Velocity and energy at range
     velocity_at_range_fps = velocity_at_range / 0.3048
     energy_joules = 0.5 * bullet_mass * velocity_at_range ** 2
     energy_ftlbs = energy_joules / 1.35582
 
-    # Bullet drop with angle and scope height
     g = 9.81
     drop_m = (0.5 * g * time_of_flight ** 2) * math.cos(target_angle_rad)
     zero_angle = math.atan2(drop_m + scope_height_m, zero_range_m)
     adjusted_drop_m = drop_m - range_m * math.tan(zero_angle) + scope_height_m
     drop_in = adjusted_drop_m * 39.3701
 
-    # Scope adjustments
     moa_adjustment = (drop_in / (range_yards / 100)) / 1.047
     mrad_adjustment = (drop_in / (range_yards / 100)) / 3.6
 
-    # Wind and spin drift
     wind_drift_in, wind_moa, wind_mrad = calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, range_yards)
     spin_drift_in = calculate_spin_drift(bullet_weight_grains, barrel_twist_in, range_yards, velocity_fps)
     total_lateral_drift_in = wind_drift_in + spin_drift_in
@@ -108,7 +96,7 @@ class BallisticCalculator(tk.Tk):
 
         # Variables
         self.velocity_var = tk.StringVar(value="3000")
-        self.bc_var = tk.StringVar(value="0.225")  # Default G7 BC
+        self.bc_var = tk.StringVar(value="0.225")
         self.bullet_weight_var = tk.StringVar(value="150")
         self.range_var = tk.StringVar(value="100")
         self.zero_range_var = tk.StringVar(value="100")
@@ -140,93 +128,135 @@ class BallisticCalculator(tk.Tk):
         self.sensor_thread.start()
 
     def create_widgets(self):
-        main_frame = ttk.Frame(self, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Main container
+        main_container = ttk.Frame(self, padding="10")
+        main_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
 
-        # Input fields
-        ttk.Label(main_frame, text="Muzzle Velocity (fps):").grid(row=0, column=0, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=self.velocity_var).grid(row=0, column=1, sticky=(tk.W, tk.E))
+        # Quadrants
+        rifle_frame = ttk.LabelFrame(main_container, text="Rifle Details", padding="5")
+        rifle_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
 
-        ttk.Label(main_frame, text="Ballistic Coefficient:").grid(row=1, column=0, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=self.bc_var).grid(row=1, column=1, sticky=(tk.W, tk.E))
+        bullet_frame = ttk.LabelFrame(main_container, text="Bullet Details", padding="5")
+        bullet_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
 
-        ttk.Label(main_frame, text="Bullet Weight (grains):").grid(row=2, column=0, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=self.bullet_weight_var).grid(row=2, column=1, sticky=(tk.W, tk.E))
+        env_frame = ttk.LabelFrame(main_container, text="Environment Details", padding="5")
+        env_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
 
-        ttk.Label(main_frame, text="Range (yards):").grid(row=3, column=0, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=self.range_var).grid(row=3, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(main_frame, text="Zero Range (yards):").grid(row=4, column=0, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=self.zero_range_var).grid(row=4, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(main_frame, text="Scope Height (inches):").grid(row=5, column=0, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=self.scope_height_var).grid(row=5, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(main_frame, text="Wind Speed (mph):").grid(row=6, column=0, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=self.wind_speed_var).grid(row=6, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(main_frame, text="Wind Direction (deg):").grid(row=7, column=0, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=self.wind_direction_var).grid(row=7, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(main_frame, text="Barrel Twist (in/turn):").grid(row=8, column=0, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=self.barrel_twist_var).grid(row=8, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(main_frame, text="Target Size (inches):").grid(row=9, column=0, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=self.target_size_var).grid(row=9, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(main_frame, text="Target Angle (deg):").grid(row=10, column=0, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=self.target_angle_var).grid(row=10, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(main_frame, text="Altitude (ft):").grid(row=11, column=0, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=self.altitude_var).grid(row=11, column=1, sticky=(tk.W, tk.E))
-
-        # Drag model toggle
-        ttk.Label(main_frame, text="Drag Model:").grid(row=12, column=0, sticky=tk.W)
-        ttk.Radiobutton(main_frame, text="G1", variable=self.drag_model_var, value="G1").grid(row=12, column=1, sticky=tk.W)
-        ttk.Radiobutton(main_frame, text="G7", variable=self.drag_model_var, value="G7").grid(row=12, column=1, sticky=tk.E)
-
-        # Sensor fields (read-only)
-        ttk.Label(main_frame, text="Temperature (°C):").grid(row=13, column=0, sticky=tk.W)
-        ttk.Label(main_frame, textvariable=self.temp_var).grid(row=13, column=1, sticky=tk.W)
-
-        ttk.Label(main_frame, text="Humidity (%):").grid(row=14, column=0, sticky=tk.W)
-        ttk.Label(main_frame, textvariable=self.humidity_var).grid(row=14, column=1, sticky=tk.W)
-
-        ttk.Label(main_frame, text="Pressure (inHg):").grid(row=15, column=0, sticky=tk.W)
-        ttk.Label(main_frame, textvariable=self.pressure_var).grid(row=15, column=1, sticky=tk.W)
-
-        # Output fields
-        ttk.Label(main_frame, text="Bullet Drop (inches):").grid(row=16, column=0, sticky=tk.W)
-        ttk.Label(main_frame, textvariable=self.drop_var).grid(row=16, column=1, sticky=tk.W)
-
-        ttk.Label(main_frame, text="Velocity at Range (fps):").grid(row=17, column=0, sticky=tk.W)
-        ttk.Label(main_frame, textvariable=self.velocity_at_range_var).grid(row=17, column=1, sticky=tk.W)
-
-        ttk.Label(main_frame, text="Energy at Range (ft-lbs):").grid(row=18, column=0, sticky=tk.W)
-        ttk.Label(main_frame, textvariable=self.energy_var).grid(row=18, column=1, sticky=tk.W)
-
-        ttk.Label(main_frame, text="Elevation Adjustment (MOA):").grid(row=19, column=0, sticky=tk.W)
-        ttk.Label(main_frame, textvariable=self.moa_var).grid(row=19, column=1, sticky=tk.W)
-
-        ttk.Label(main_frame, text="Elevation Adjustment (MRAD):").grid(row=20, column=0, sticky=tk.W)
-        ttk.Label(main_frame, textvariable=self.mrad_var).grid(row=20, column=1, sticky=tk.W)
-
-        ttk.Label(main_frame, text="Lateral Drift (inches):").grid(row=21, column=0, sticky=tk.W)
-        ttk.Label(main_frame, textvariable=self.lateral_drift_var).grid(row=21, column=1, sticky=tk.W)
-
-        ttk.Label(main_frame, text="Windage Adjustment (MOA):").grid(row=22, column=0, sticky=tk.W)
-        ttk.Label(main_frame, textvariable=self.lateral_moa_var).grid(row=22, column=1, sticky=tk.W)
-
-        ttk.Label(main_frame, text="Windage Adjustment (MRAD):").grid(row=23, column=0, sticky=tk.W)
-        ttk.Label(main_frame, textvariable=self.lateral_mrad_var).grid(row=23, column=1, sticky=tk.W)
-
-        # Calculate button
-        ttk.Button(main_frame, text="Calculate", command=self.calculate).grid(row=24, column=0, columnspan=2, pady=10)
+        result_frame = ttk.LabelFrame(main_container, text="Resulting Calculations", padding="5")
+        result_frame.grid(row=1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
 
         # Configure grid weights
-        main_frame.columnconfigure(1, weight=1)
-        for i in range(25):
-            main_frame.rowconfigure(i, weight=1)
+        main_container.columnconfigure(0, weight=1)
+        main_container.columnconfigure(1, weight=1)
+        main_container.rowconfigure(0, weight=1)
+        main_container.rowconfigure(1, weight=1)
+
+        # Rifle Details (Top Left)
+        ttk.Label(rifle_frame, text="Scope Height (in):").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(rifle_frame, textvariable=self.scope_height_var).grid(row=0, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(rifle_frame, text="Zero Range (yd):").grid(row=1, column=0, sticky=tk.W)
+        ttk.Entry(rifle_frame, textvariable=self.zero_range_var).grid(row=1, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(rifle_frame, text="Barrel Twist (in/turn):").grid(row=2, column=0, sticky=tk.W)
+        ttk.Entry(rifle_frame, textvariable=self.barrel_twist_var).grid(row=2, column=1, sticky=(tk.W, tk.E))
+
+        rifle_frame.columnconfigure(1, weight=1)
+
+        # Bullet Details (Top Right)
+        ttk.Label(bullet_frame, text="Muzzle Velocity (fps):").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(bullet_frame, textvariable=self.velocity_var).grid(row=0, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(bullet_frame, text="Ballistic Coefficient:").grid(row=1, column=0, sticky=tk.W)
+        ttk.Entry(bullet_frame, textvariable=self.bc_var).grid(row=1, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(bullet_frame, text="Bullet Weight (gr):").grid(row=2, column=0, sticky=tk.W)
+        ttk.Entry(bullet_frame, textvariable=self.bullet_weight_var).grid(row=2, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(bullet_frame, text="Drag Model:").grid(row=3, column=0, sticky=tk.W)
+        ttk.Radiobutton(bullet_frame, text="G1", variable=self.drag_model_var, value="G1").grid(row=3, column=1, sticky=tk.W)
+        ttk.Radiobutton(bullet_frame, text="G7", variable=self.drag_model_var, value="G7").grid(row=3, column=1, sticky=tk.E)
+
+        bullet_frame.columnconfigure(1, weight=1)
+
+        # Environment Details (Bottom Left)
+        ttk.Label(env_frame, text="Range (yd):").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(env_frame, textvariable=self.range_var).grid(row=0, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(env_frame, text="Target Size (in):").grid(row=1, column=0, sticky=tk.W)
+        ttk.Entry(env_frame, textvariable=self.target_size_var).grid(row=1, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(env_frame, text="Target Angle (deg):").grid(row=2, column=0, sticky=tk.W)
+        ttk.Entry(env_frame, textvariable=self.target_angle_var).grid(row=2, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(env_frame, text="Wind Speed (mph):").grid(row=3, column=0, sticky=tk.W)
+        ttk.Entry(env_frame, textvariable=self.wind_speed_var).grid(row=3, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(env_frame, text="Wind Direction (deg):").grid(row=4, column=0, sticky=tk.W)
+        ttk.Entry(env_frame, textvariable=self.wind_direction_var).grid(row=4, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(env_frame, text="Altitude (ft):").grid(row=5, column=0, sticky=tk.W)
+        ttk.Entry(env_frame, textvariable=self.altitude_var).grid(row=5, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(env_frame, text="Temperature (°C):").grid(row=6, column=0, sticky=tk.W)
+        ttk.Label(env_frame, textvariable=self.temp_var).grid(row=6, column=1, sticky=tk.W)
+
+        ttk.Label(env_frame, text="Humidity (%):").grid(row=7, column=0, sticky=tk.W)
+        ttk.Label(env_frame, textvariable=self.humidity_var).grid(row=7, column=1, sticky=tk.W)
+
+        ttk.Label(env_frame, text="Pressure (inHg):").grid(row=8, column=0, sticky=tk.W)
+        ttk.Label(env_frame, textvariable=self.pressure_var).grid(row=8, column=1, sticky=tk.W)
+
+        env_frame.columnconfigure(1, weight=1)
+
+        # Resulting Calculations (Bottom Right)
+        ttk.Label(result_frame, text="Bullet Drop (in):").grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(result_frame, textvariable=self.drop_var).grid(row=0, column=1, sticky=tk.W)
+
+        ttk.Label(result_frame, text="Velocity at Range (fps):").grid(row=1, column=0, sticky=tk.W)
+        ttk.Label(result_frame, textvariable=self.velocity_at_range_var).grid(row=1, column=1, sticky=tk.W)
+
+        ttk.Label(result_frame, text="Energy at Range (ft-lbs):").grid(row=2, column=0, sticky=tk.W)
+        ttk.Label(result_frame, textvariable=self.energy_var).grid(row=2, column=1, sticky=tk.W)
+
+        ttk.Label(result_frame, text="Elevation Adjustment (MOA):").grid(row=3, column=0, sticky=tk.W)
+        ttk.Label(result_frame, textvariable=self.moa_var).grid(row=3, column=1, sticky=tk.W)
+
+        ttk.Label(result_frame, text="Elevation Adjustment (MRAD):").grid(row=4, column=0, sticky=tk.W)
+        ttk.Label(result_frame, textvariable=self.mrad_var).grid(row=4, column=1, sticky=tk.W)
+
+        ttk.Label(result_frame, text="Lateral Drift (in):").grid(row=5, column=0, sticky=tk.W)
+        ttk.Label(result_frame, textvariable=self.lateral_drift_var).grid(row=5, column=1, sticky=tk.W)
+
+        ttk.Label(result_frame, text="Windage Adjustment (MOA):").grid(row=6, column=0, sticky=tk.W)
+        ttk.Label(result_frame, textvariable=self.lateral_moa_var).grid(row=6, column=1, sticky=tk.W)
+
+        ttk.Label(result_frame, text="Windage Adjustment (MRAD):").grid(row=7, column=0, sticky=tk.W)
+        ttk.Label(result_frame, textvariable=self.lateral_mrad_var).grid(row=7, column=1, sticky=tk.W)
+
+        result_frame.columnconfigure(1, weight=1)
+
+        # Calculate button
+        ttk.Button(main_container, text="Calculate", command=self.calculate).grid(row=2, column=0, columnspan=2, pady=10)
+
+    def poll_sense_grid(self, drop_in, lateral_drift_in):
+        """Update Sense HAT 8x8 grid to show bullet impact point."""
+        self.sense.clear()
+        # Scale 8x8 grid to 16x16 inches (2 in per pixel)
+        scale = 2.0
+        x = int(lateral_drift_in / scale) + 4  # Center at x=4
+        y = int(-drop_in / scale) + 4  # Center at y=4, negative drop (down)
+        if 0 <= x < 8 and 0 <= y < 8:
+            self.sense.set_pixel(x, y, 255, 0, 0)  # Red pixel for impact
+        else:
+            # Flash red if impact is off target
+            for _ in range(2):
+                self.sense.clear(255, 0, 0)
+                time.sleep(0.5)
+                self.sense.clear()
+                time.sleep(0.5)
 
     def poll_sensors(self):
         """Continuously poll Sense HAT sensors and update GUI."""
@@ -290,6 +320,9 @@ class BallisticCalculator(tk.Tk):
             self.lateral_moa_var.set(f"{lateral_moa:.2f}")
             self.lateral_mrad_var.set(f"{lateral_mrad:.2f}")
 
+            # Update Sense HAT grid
+            self.poll_sense_grid(drop, lateral_drift)
+
             # Validate target size
             if abs(drop) > target_size:
                 messagebox.showwarning("Target Warning", f"Bullet drop ({abs(drop):.2f} in) exceeds target size ({target_size:.2f} in).")
@@ -297,6 +330,7 @@ class BallisticCalculator(tk.Tk):
                 messagebox.showwarning("Target Warning", f"Lateral drift ({abs(lateral_drift):.2f} in) exceeds target size ({target_size:.2f} in).")
         except ValueError as e:
             messagebox.showerror("Input Error", str(e))
+            self.sense.clear()
 
     def destroy(self):
         """Clean up on exit."""
