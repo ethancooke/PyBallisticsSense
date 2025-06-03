@@ -35,16 +35,17 @@ def calculate_spin_drift(bullet_weight_grains, barrel_twist_in, range_yards, vel
     drift_m = 1.25 * (bullet_mass_kg / 0.01) * (range_m / 1000) ** 2 / (velocity_ms / 300) * (twist_rate / 0.1)
     return drift_m * 39.3701
 
-def calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, range_yards, velocity_fps):
-    """Calculate lateral drift due to wind, corrected for drag."""
+def calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, range_yards, velocity_fps, bc, drag_model):
+    """Calculate lateral drift due to wind, corrected for drag and BC."""
     wind_speed_ms = wind_speed_mph * 0.44704
     crosswind = wind_speed_ms * math.sin(math.radians(wind_direction_deg))
     range_m = range_yards * 0.9144
     velocity_ms = velocity_fps * 0.3048
-    # Corrected drift: accounts for bullet slowdown (Litz approximation)
-    drift_m = crosswind * (time_of_flight - range_m / velocity_ms)
+    # Corrected wind drift: accounts for BC and drag (Litz approximation)
+    drift_time = time_of_flight * (1 - bc / (1 + bc))  # Adjust effective time based on BC
+    drift_m = crosswind * drift_time * (range_m / velocity_ms) / (bc * 2)
     drift_in = drift_m * 39.3701
-    if abs(drift_in) > 1000:  # Cap unrealistic drift
+    if abs(drift_in) > 100 * 36:  # Cap at 100 yards
         drift_in = 0.0
     moa = (drift_in / (range_yards / 100)) / 1.047 if range_yards > 0 else 0.0
     mrad = (drift_in / (range_yards / 100)) / 3.6 if range_yards > 0 else 0.0
@@ -64,10 +65,10 @@ def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, ze
     drag_coeff = 0.5 if drag_model == "G1" else 0.25
     air_density = (adjusted_pressure * 3386.39) / (287.05 * (temp_c + 273.15))
 
-    # Iterative time of flight for accuracy
+    # Iterative time of flight
     time_of_flight = range_m / velocity
     velocity_at_range = velocity * math.exp(-drag_coeff * air_density * bullet_area * range_m / (2 * bullet_mass * corrected_bc))
-    for _ in range(2):  # Two iterations for convergence
+    for _ in range(3):  # Three iterations for better accuracy
         avg_velocity = (velocity + velocity_at_range) / 2
         time_of_flight = range_m / avg_velocity
         velocity_at_range = velocity * math.exp(-drag_coeff * air_density * bullet_area * range_m / (2 * bullet_mass * corrected_bc))
@@ -85,7 +86,7 @@ def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, ze
     moa_adjustment = (drop_in / (range_yards / 100)) / 1.047 if range_yards > 0 else 0.0
     mrad_adjustment = (drop_in / (range_yards / 100)) / 3.6 if range_yards > 0 else 0.0
 
-    wind_drift_in, wind_moa, wind_mrad = calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, range_yards, velocity_fps)
+    wind_drift_in, wind_moa, wind_mrad = calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, range_yards, velocity_fps, corrected_bc, drag_model)
     spin_drift_in = calculate_spin_drift(bullet_weight_grains, barrel_twist_in, range_yards, velocity_fps)
     total_lateral_drift_in = wind_drift_in + spin_drift_in
     total_lateral_moa = (total_lateral_drift_in / (range_yards / 100)) / 1.047 if range_yards > 0 else 0.0
@@ -105,7 +106,7 @@ class BallisticCalculator(tk.Tk):
 
         # Variables
         self.velocity_var = tk.StringVar(value="3000")
-        self.bc_var = tk.StringVar(value="0.225")
+        self.bc_var = tk.StringVar(value="0.500")  # Updated to match user input
         self.bullet_weight_var = tk.StringVar(value="150")
         self.range_var = tk.StringVar(value="100")
         self.zero_range_var = tk.StringVar(value="100")
