@@ -1,4 +1,8 @@
+#!/usr/bin/python3
+import tkinter as tk
+from tkinter import ttk, messagebox
 from sense_hat import SenseHat
+import threading
 import time
 import math
 
@@ -6,132 +10,168 @@ import math
 sense = SenseHat()
 sense.clear()
 
-# Define colors for each sensor row
-colors = [
-    [255, 0, 0],   # Red for temperature
-    [0, 255, 0],   # Green for humidity
-    [0, 0, 255],   # Blue for pressure
-    [255, 255, 0], # Yellow for accel_x
-    [255, 0, 255], # Magenta for accel_y
-    [0, 255, 255], # Cyan for accel_z
-    [255, 128, 0], # Orange for gyro_yaw
-    [128, 128, 128] # Gray for mag_magnitude
-]
+# Ballistic calculation functions
+def atmosphere_correction(bc, temp_c, humidity, pressure=29.92):
+    """Adjust ballistic coefficient for environmental conditions."""
+    # Standard conditions: 59°F (15°C), 0% humidity, 29.92 inHg
+    temp_k = temp_c + 273.15
+    std_temp_k = 15 + 273.15
+    # Simplified correction factor (approximate)
+    temp_factor = std_temp_k / temp_k
+    humidity_factor = 1 - (humidity / 100) * 0.02  # Humidity reduces air density slightly
+    corrected_bc = bc * temp_factor * humidity_factor
+    return corrected_bc
 
-# Color names for console output
-color_names = [
-    "Red",      # Temperature
-    "Green",    # Humidity
-    "Blue",     # Pressure
-    "Yellow",   # Accel_x
-    "Magenta",  # Accel_y
-    "Cyan",     # Accel_z
-    "Orange",   # Gyro_yaw
-    "Gray"      # Mag_magnitude
-]
+def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, zero_range_yards, temp_c, humidity):
+    """Calculate bullet drop and velocity at range using point-mass model."""
+    # Convert inputs
+    velocity = velocity_fps * 0.3048  # Convert fps to m/s
+    range_m = range_yards * 0.9144  # Convert yards to meters
+    zero_range_m = zero_range_yards * 0.9144  # Convert yards to meters
 
-# Function to scale sensor value to 0-8 range for LED display
-def scale_value(value, min_val, max_val):
-    # Ensure value is within bounds
-    value = max(min_val, min(value, max_val))
-    # Scale to 0-8
-    scaled = (value - min_val) / (max_val - min_val) * 8
-    return int(round(scaled))
+    # Adjust BC for environment
+    corrected_bc = atmosphere_correction(bc, temp_c, humidity)
 
-# Function to apply vertical and horizontal flips to pixel array
-def apply_flips(pixels, flip_h, flip_v):
-    new_pixels = pixels.copy()
-    # Convert 1D array (64 pixels) to 2D 8x8 array
-    grid = [new_pixels[i:i+8] for i in range(0, 64, 8)]
-    # Apply horizontal flip
-    if flip_h:
-        grid = [row[::-1] for row in grid]
-    # Apply vertical flip
-    if flip_v:
-        grid = grid[::-1]
-    # Flatten back to 1D array
-    return [pixel for row in grid for pixel in row]
+    # Simplified drag model (G1 approximation)
+    drag_coeff = 0.5  # Approximate for G1 drag model
+    air_density = 1.225 * (1 - 0.0065 * temp_c / 288.15) ** 4.255  # Approximate air density
+    bullet_mass = bullet_weight_grains / 7000 * 0.453592  # Convert grains to kg
+    bullet_area = 0.000506707  # Approx. cross-sectional area for .308 bullet (m^2)
 
-# Function to format and print sensor data with colors and orientation
-def print_sensor_data(temperature, humidity, pressure, accel, gyro_z, mag_magnitude, rotation, flip_h, flip_v):
-    orientation = f"Rotation: {rotation}°, Flip H: {'On' if flip_h else 'Off'}, Flip V: {'On' if flip_v else 'Off'}"
-    print(f"\rTemp ({color_names[0]}): {temperature:.1f}°C, "
-          f"Humidity ({color_names[1]}): {humidity:.1f}%, "
-          f"Pressure ({color_names[2]}): {pressure:.1f}mbar, "
-          f"Accel X ({color_names[3]}): {accel['x']:.2f}g, "
-          f"Accel Y ({color_names[4]}): {accel['y']:.2f}g, "
-          f"Accel Z ({color_names[5]}): {accel['z']:.2f}g, "
-          f"Gyro Z ({color_names[6]}): {gyro_z:.2f}rad/s, "
-          f"Mag ({color_names[7]}): {mag_magnitude:.1f}uT, "
-          f"{orientation}", end='')
+    # Time of flight
+    time_of_flight = range_m / velocity  # Simplified, ignoring drag slowdown
 
-# Initialize orientation state
-rotation = 0  # 0, 90, 180, 270 degrees
-flip_h = False  # Horizontal flip
-flip_v = False  # Vertical flip
+    # Velocity at range (simplified exponential decay)
+    velocity_at_range = velocity * math.exp(-drag_coeff * air_density * bullet_area * range_m / (2 * bullet_mass * corrected_bc))
+    velocity_at_range_fps = velocity_at_range / 0.3048  # Convert back to fps
 
-# Main loop
-while True:
-    # Handle joystick events
-    for event in sense.stick.get_events():
-        if event.action == "pressed":
-            if event.direction == "up":
-                flip_v = not flip_v  # Toggle vertical flip
-            elif event.direction == "down":
-                flip_v = not flip_v  # Toggle vertical flip (same as up for simplicity)
-            elif event.direction == "left":
-                flip_h = not flip_h  # Toggle horizontal flip
-            elif event.direction == "right":
-                flip_h = not flip_h  # Toggle horizontal flip (same as left)
-            elif event.direction == "middle":
-                # Reset orientation
-                rotation = 0
-                flip_h = False
-                flip_v = False
+    # Bullet drop (gravity and zero adjustment)
+    g = 9.81  # Gravity (m/s^2)
+    drop_m = (0.5 * g * time_of_flight ** 2)  # Drop due to gravity
+    # Adjust for zero range (simplified, assumes flat-fire approximation)
+    zero_angle = math.atan2(drop_m, zero_range_m)
+    adjusted_drop_m = drop_m - range_m * math.tan(zero_angle)
+    drop_in = adjusted_drop_m * 39.3701  # Convert meters to inches
 
-    # Get sensor readings
-    temperature = sense.get_temperature()  # in Celsius (0 to 50 typical)
-    humidity = sense.get_humidity()        # in % (0 to 100)
-    pressure = sense.get_pressure()        # in millibars (950 to 1050 typical)
-    accel = sense.get_accelerometer_raw()  # in g (-2 to 2)
-    gyro = sense.get_gyroscope_raw()       # in radians/s (-10 to 10)
-    mag = sense.get_compass_raw()          # in microteslas (-50 to 50 per axis)
+    return drop_in, velocity_at_range_fps
 
-    # Calculate magnetometer magnitude
-    mag_magnitude = math.sqrt(mag['x']**2 + mag['y']**2 + mag['z']**2)
+# GUI Application
+class BallisticCalculator(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Ballistic Calculator")
+        self.geometry("800x480")  # Optimized for Raspberry Pi 7" display
+        self.attributes("-fullscreen", False)  # Set to True for fullscreen
+        self.sense = sense
+        self.running = True
 
-    # Print sensor data to console with colors and orientation
-    print_sensor_data(temperature, humidity, pressure, accel, gyro['z'], mag_magnitude, rotation, flip_h, flip_v)
+        # Variables
+        self.velocity_var = tk.StringVar(value="3000")  # Default muzzle velocity (fps)
+        self.bc_var = tk.StringVar(value="0.45")  # Default ballistic coefficient (G1)
+        self.bullet_weight_var = tk.StringVar(value="150")  # Default bullet weight (grains)
+        self.range_var = tk.StringVar(value="100")  # Default range (yards)
+        self.zero_range_var = tk.StringVar(value="100")  # Default zero range (yards)
+        self.temp_var = tk.StringVar(value="N/A")
+        self.humidity_var = tk.StringVar(value="N/A")
+        self.drop_var = tk.StringVar(value="0.00")
+        self.velocity_at_range_var = tk.StringVar(value="0.00")
 
-    # Scale sensor values to 0-8
-    sensor_values = [
-        scale_value(temperature, 0, 50),      # Temperature: 0-50°C
-        scale_value(humidity, 0, 100),        # Humidity: 0-100%
-        scale_value(pressure, 950, 1050),     # Pressure: 950-1050 mbar
-        scale_value(accel['x'], -2, 2),       # Accel x: -2 to 2g
-        scale_value(accel['y'], -2, 2),       # Accel y: -2 to 2g
-        scale_value(accel['z'], -2, 2),       # Accel z: -2 to 2g
-        scale_value(gyro['z'], -10, 10),      # Gyro yaw (z-axis): -10 to 10 rad/s
-        scale_value(mag_magnitude, 0, 100)    # Mag magnitude: 0-100 uT
-    ]
+        # GUI Layout
+        self.create_widgets()
 
-    # Create 8x8 pixel array
-    pixels = []
-    for row in range(8):
-        sensor_val = sensor_values[row]
-        color = colors[row]
-        # Create row: light up LEDs up to sensor value
-        row_pixels = [color if col < sensor_val else [0, 0, 0] for col in range(8)]
-        pixels.extend(row_pixels)
+        # Start sensor polling thread
+        self.sensor_thread = threading.Thread(target=self.poll_sensors, daemon=True)
+        self.sensor_thread.start()
 
-    # Apply horizontal and vertical flips
-    pixels = apply_flips(pixels, flip_h, flip_v)
+    def create_widgets(self):
+        # Main frame
+        main_frame = ttk.Frame(self, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-    # Set rotation
-    sense.set_rotation(rotation)
+        # Input fields
+        ttk.Label(main_frame, text="Muzzle Velocity (fps):").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(main_frame, textvariable=self.velocity_var).grid(row=0, column=1, sticky=(tk.W, tk.E))
 
-    # Update LED matrix
-    sense.set_pixels(pixels)
+        ttk.Label(main_frame, text="Ballistic Coefficient (G1):").grid(row=1, column=0, sticky=tk.W)
+        ttk.Entry(main_frame, textvariable=self.bc_var).grid(row=1, column=1, sticky=(tk.W, tk.E))
 
-    # Small delay to avoid overwhelming the display
-    time.sleep(0.5)
+        ttk.Label(main_frame, text="Bullet Weight (grains):").grid(row=2, column=0, sticky=tk.W)
+        ttk.Entry(main_frame, textvariable=self.bullet_weight_var).grid(row=2, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(main_frame, text="Range (yards):").grid(row=3, column=0, sticky=tk.W)
+        ttk.Entry(main_frame, textvariable=self.range_var).grid(row=3, column=1, sticky=(tk.W, tk.E))
+
+        ttk.Label(main_frame, text="Zero Range (yards):").grid(row=4, column=0, sticky=tk.W)
+        ttk.Entry(main_frame, textvariable=self.zero_range_var).grid(row=4, column=1, sticky=(tk.W, tk.E))
+
+        # Sensor fields (read-only)
+        ttk.Label(main_frame, text="Temperature (°C):").grid(row=5, column=0, sticky=tk.W)
+        ttk.Label(main_frame, textvariable=self.temp_var).grid(row=5, column=1, sticky=tk.W)
+
+        ttk.Label(main_frame, text="Humidity (%):").grid(row=6, column=0, sticky=tk.W)
+        ttk.Label(main_frame, textvariable=self.humidity_var).grid(row=6, column=1, sticky=tk.W)
+
+        # Output fields
+        ttk.Label(main_frame, text="Bullet Drop (inches):").grid(row=7, column=0, sticky=tk.W)
+        ttk.Label(main_frame, textvariable=self.drop_var).grid(row=7, column=1, sticky=tk.W)
+
+        ttk.Label(main_frame, text="Velocity at Range (fps):").grid(row=8, column=0, sticky=tk.W)
+        ttk.Label(main_frame, textvariable=self.velocity_at_range_var).grid(row=8, column=1, sticky=tk.W)
+
+        # Calculate button
+        ttk.Button(main_frame, text="Calculate", command=self.calculate).grid(row=9, column=0, columnspan=2, pady=10)
+
+        # Configure grid weights
+        main_frame.columnconfigure(1, weight=1)
+        for i in range(10):
+            main_frame.rowconfigure(i, weight=1)
+
+    def poll_sensors(self):
+        """Continuously poll Sense HAT sensors and update GUI."""
+        while self.running:
+            try:
+                temp_c = self.sense.get_temperature()
+                humidity = self.sense.get_humidity()
+                self.temp_var.set(f"{temp_c:.1f}")
+                self.humidity_var.set(f"{humidity:.1f}")
+            except Exception as e:
+                self.temp_var.set("Error")
+                self.humidity_var.set("Error")
+                print(f"Sensor error: {e}")
+            time.sleep(2)  # Poll every 2 seconds
+
+    def calculate(self):
+        """Perform ballistic calculation based on inputs."""
+        try:
+            velocity = float(self.velocity_var.get())
+            bc = float(self.bc_var.get())
+            bullet_weight = float(self.bullet_weight_var.get())
+            range_yards = float(self.range_var.get())
+            zero_range_yards = float(self.zero_range_var.get())
+            temp_c = float(self.temp_var.get()) if self.temp_var.get() != "Error" else 15.0
+            humidity = float(self.humidity_var.get()) if self.humidity_var.get() != "Error" else 0.0
+
+            if velocity <= 0 or bc <= 0 or bullet_weight <= 0 or range_yards < 0 or zero_range_yards <= 0:
+                raise ValueError("Inputs must be positive numbers (except range).")
+
+            drop, velocity_at_range = calculate_trajectory(
+                velocity, bc, bullet_weight, range_yards, zero_range_yards, temp_c, humidity
+            )
+            self.drop_var.set(f"{drop:.2f}")
+            self.velocity_at_range_var.set(f"{velocity_at_range:.2f}")
+        except ValueError as e:
+            messagebox.showerror("Input Error", str(e))
+
+    def destroy(self):
+        """Clean up on exit."""
+        self.running = False
+        self.sense.clear()
+        super().destroy()
+
+# Run the application
+if __name__ == "__main__":
+    try:
+        app = BallisticCalculator()
+        app.mainloop()
+    except KeyboardInterrupt:
+        app.destroy()
