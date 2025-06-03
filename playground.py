@@ -35,14 +35,19 @@ def calculate_spin_drift(bullet_weight_grains, barrel_twist_in, range_yards, vel
     drift_m = 1.25 * (bullet_mass_kg / 0.01) * (range_m / 1000) ** 2 / (velocity_ms / 300) * (twist_rate / 0.1)
     return drift_m * 39.3701
 
-def calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, range_yards):
-    """Calculate lateral drift due to wind."""
+def calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, range_yards, velocity_fps):
+    """Calculate lateral drift due to wind, corrected for drag."""
     wind_speed_ms = wind_speed_mph * 0.44704
     crosswind = wind_speed_ms * math.sin(math.radians(wind_direction_deg))
-    drift_m = crosswind * time_of_flight
+    range_m = range_yards * 0.9144
+    velocity_ms = velocity_fps * 0.3048
+    # Corrected drift: accounts for bullet slowdown (Litz approximation)
+    drift_m = crosswind * (time_of_flight - range_m / velocity_ms)
     drift_in = drift_m * 39.3701
-    moa = (drift_in / (range_yards / 100)) / 1.047
-    mrad = (drift_in / (range_yards / 100)) / 3.6
+    if abs(drift_in) > 1000:  # Cap unrealistic drift
+        drift_in = 0.0
+    moa = (drift_in / (range_yards / 100)) / 1.047 if range_yards > 0 else 0.0
+    mrad = (drift_in / (range_yards / 100)) / 3.6 if range_yards > 0 else 0.0
     return drift_in, moa, mrad
 
 def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, zero_range_yards, scope_height_in, temp_c, humidity, pressure_inhg, altitude_ft, target_angle_deg, drag_model, wind_speed_mph, wind_direction_deg, barrel_twist_in):
@@ -59,9 +64,13 @@ def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, ze
     drag_coeff = 0.5 if drag_model == "G1" else 0.25
     air_density = (adjusted_pressure * 3386.39) / (287.05 * (temp_c + 273.15))
 
+    # Iterative time of flight for accuracy
     time_of_flight = range_m / velocity
     velocity_at_range = velocity * math.exp(-drag_coeff * air_density * bullet_area * range_m / (2 * bullet_mass * corrected_bc))
-    time_of_flight = range_m / ((velocity + velocity_at_range) / 2)
+    for _ in range(2):  # Two iterations for convergence
+        avg_velocity = (velocity + velocity_at_range) / 2
+        time_of_flight = range_m / avg_velocity
+        velocity_at_range = velocity * math.exp(-drag_coeff * air_density * bullet_area * range_m / (2 * bullet_mass * corrected_bc))
 
     velocity_at_range_fps = velocity_at_range / 0.3048
     energy_joules = 0.5 * bullet_mass * velocity_at_range ** 2
@@ -69,18 +78,18 @@ def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, ze
 
     g = 9.81
     drop_m = (0.5 * g * time_of_flight ** 2) * math.cos(target_angle_rad)
-    zero_angle = math.atan2(drop_m + scope_height_m, zero_range_m)
+    zero_angle = math.atan2(drop_m + scope_height_m, zero_range_m) if zero_range_m > 0 else 0.0
     adjusted_drop_m = drop_m - range_m * math.tan(zero_angle) + scope_height_m
     drop_in = adjusted_drop_m * 39.3701
 
-    moa_adjustment = (drop_in / (range_yards / 100)) / 1.047
-    mrad_adjustment = (drop_in / (range_yards / 100)) / 3.6
+    moa_adjustment = (drop_in / (range_yards / 100)) / 1.047 if range_yards > 0 else 0.0
+    mrad_adjustment = (drop_in / (range_yards / 100)) / 3.6 if range_yards > 0 else 0.0
 
-    wind_drift_in, wind_moa, wind_mrad = calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, range_yards)
+    wind_drift_in, wind_moa, wind_mrad = calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, range_yards, velocity_fps)
     spin_drift_in = calculate_spin_drift(bullet_weight_grains, barrel_twist_in, range_yards, velocity_fps)
     total_lateral_drift_in = wind_drift_in + spin_drift_in
-    total_lateral_moa = (total_lateral_drift_in / (range_yards / 100)) / 1.047
-    total_lateral_mrad = (total_lateral_drift_in / (range_yards / 100)) / 3.6
+    total_lateral_moa = (total_lateral_drift_in / (range_yards / 100)) / 1.047 if range_yards > 0 else 0.0
+    total_lateral_mrad = (total_lateral_drift_in / (range_yards / 100)) / 3.6 if range_yards > 0 else 0.0
 
     return drop_in, velocity_at_range_fps, energy_ftlbs, moa_adjustment, mrad_adjustment, total_lateral_drift_in, total_lateral_moa, total_lateral_mrad
 
@@ -128,7 +137,6 @@ class BallisticCalculator(tk.Tk):
         self.sensor_thread.start()
 
     def create_widgets(self):
-        # Main container
         main_container = ttk.Frame(self, padding="10")
         main_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.columnconfigure(0, weight=1)
@@ -147,7 +155,6 @@ class BallisticCalculator(tk.Tk):
         result_frame = ttk.LabelFrame(main_container, text="Resulting Calculations", padding="5")
         result_frame.grid(row=1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
 
-        # Configure grid weights
         main_container.columnconfigure(0, weight=1)
         main_container.columnconfigure(1, weight=1)
         main_container.rowconfigure(0, weight=1)
@@ -244,8 +251,8 @@ class BallisticCalculator(tk.Tk):
     def poll_sense_grid(self, drop_in, lateral_drift_in):
         """Update Sense HAT 8x8 grid to show bullet impact point."""
         self.sense.clear()
-        # Scale 8x8 grid to 16x16 inches (2 in per pixel)
-        scale = 2.0
+        # Scale 8x8 grid to 8x8 inches (1 in per pixel)
+        scale = 1.0
         x = int(lateral_drift_in / scale) + 4  # Center at x=4
         y = int(-drop_in / scale) + 4  # Center at y=4, negative drop (down)
         if 0 <= x < 8 and 0 <= y < 8:
