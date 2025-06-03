@@ -10,7 +10,35 @@ import math
 sense = SenseHat()
 sense.clear()
 
+# 5x3 pixel font for 0-9 (1=lit, 0=off)
+FONT = {
+    '0': [[1,1,1],[1,0,1],[1,0,1],[1,0,1],[1,1,1]],
+    '1': [[0,1,0],[1,1,0],[0,1,0],[0,1,0],[1,1,1]],
+    '2': [[1,1,1],[0,0,1],[1,1,1],[1,0,0],[1,1,1]],
+    '3': [[1,1,1],[0,0,1],[1,1,1],[0,0,1],[1,1,1]],
+    '4': [[1,0,1],[1,0,1],[1,1,1],[0,0,1],[0,0,1]],
+    '5': [[1,1,1],[1,0,0],[1,1,1],[0,0,1],[1,1,1]],
+    '6': [[1,1,1],[1,0,0],[1,1,1],[1,0,1],[1,1,1]],
+    '7': [[1,1,1],[0,0,1],[0,1,0],[1,0,0],[1,0,0]],
+    '8': [[1,1,1],[1,0,1],[1,1,1],[1,0,1],[1,1,1]],
+    '9': [[1,1,1],[1,0,1],[1,1,1],[0,0,1],[1,1,1]]
+}
+
 # Ballistic calculation functions
+def convert_temperature(value, to_celsius):
+    """Convert temperature between °C and °F."""
+    if to_celsius:
+        return (value - 32) * 5/9 if not isinstance(value, str) else value
+    return value * 9/5 + 32 if not isinstance(value, str) else value
+
+def convert_distance(value, to_meters, is_height=False):
+    """Convert distance between yards/meters or inches/cm."""
+    if isinstance(value, str):
+        return value
+    if is_height:
+        return value * 2.54 if to_meters else value / 2.54  # inches to cm
+    return value * 0.9144 if to_meters else value / 0.9144  # yards to meters
+
 def atmosphere_correction(bc, temp_c, humidity, pressure_inhg, altitude_ft):
     """Adjust ballistic coefficient for environmental conditions."""
     temp_k = temp_c + 273.15
@@ -25,38 +53,32 @@ def atmosphere_correction(bc, temp_c, humidity, pressure_inhg, altitude_ft):
     corrected_bc = bc * density_factor * humidity_factor
     return corrected_bc, pressure_inhg
 
-def calculate_spin_drift(bullet_weight_grains, barrel_twist_in, range_yards, velocity_fps):
+def calculate_spin_drift(bullet_weight_grains, barrel_twist_in, range_m, velocity_ms):
     """Calculate spin drift."""
     bullet_mass_kg = bullet_weight_grains / 7000 * 0.453592
-    range_m = range_yards * 0.9144
-    velocity_ms = velocity_fps * 0.3048
     twist_rate = 1 / barrel_twist_in
     spin_velocity = velocity_ms * twist_rate * 0.0254
     drift_m = 1.25 * (bullet_mass_kg / 0.01) * (range_m / 1000) ** 2 / (velocity_ms / 300) * (twist_rate / 0.1)
-    return drift_m * 39.3701
+    return drift_m
 
-def calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, range_yards, velocity_fps, bc, drag_model):
-    """Calculate lateral drift due to wind, corrected for drag and BC."""
-    wind_speed_ms = wind_speed_mph * 0.44704
+def calculate_wind_drift(wind_speed_ms, wind_direction_deg, time_of_flight, range_m, velocity_ms, bc):
+    """Calculate lateral drift due to wind."""
     crosswind = wind_speed_ms * math.sin(math.radians(wind_direction_deg))
-    range_m = range_yards * 0.9144
-    velocity_ms = velocity_fps * 0.3048
-    # Corrected wind drift: accounts for BC and drag (Litz approximation)
-    drift_time = time_of_flight * (1 - bc / (1 + bc))  # Adjust effective time based on BC
-    drift_m = crosswind * drift_time * (range_m / velocity_ms) / (bc * 2)
-    drift_in = drift_m * 39.3701
-    if abs(drift_in) > 100 * 36:  # Cap at 100 yards
-        drift_in = 0.0
-    moa = (drift_in / (range_yards / 100)) / 1.047 if range_yards > 0 else 0.0
-    mrad = (drift_in / (range_yards / 100)) / 3.6 if range_yards > 0 else 0.0
-    return drift_in, moa, mrad
+    # Litz-based model: drift adjusted for BC and velocity decay
+    drift_m = crosswind * time_of_flight * (1 - bc / 2) / (bc * 1.5)
+    if abs(drift_m) > 100:  # Cap at ~100 meters
+        drift_m = 0.0
+    return drift_m
 
-def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, zero_range_yards, scope_height_in, temp_c, humidity, pressure_inhg, altitude_ft, target_angle_deg, drag_model, wind_speed_mph, wind_direction_deg, barrel_twist_in):
+def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, zero_range_yards, scope_height_in, temp_c, humidity, pressure_inhg, altitude_ft, target_angle_deg, drag_model, wind_speed_mph, wind_direction_deg, barrel_twist_in, use_meters, use_celsius):
     """Calculate bullet drop, velocity, energy, and scope adjustments."""
-    velocity = velocity_fps * 0.3048
-    range_m = range_yards * 0.9144
-    zero_range_m = zero_range_yards * 0.9144
-    scope_height_m = scope_height_in * 0.0254
+    # Convert inputs based on units
+    velocity_ms = velocity_fps * 0.3048
+    range_m = convert_distance(range_yards, True) if not use_meters else range_yards
+    zero_range_m = convert_distance(zero_range_yards, True) if not use_meters else zero_range_yards
+    scope_height_m = convert_distance(scope_height_in, True, is_height=True) / 100  # cm to m
+    temp_c = convert_temperature(temp_c, True) if not use_celsius else temp_c
+    wind_speed_ms = wind_speed_mph * 0.44704
     bullet_mass = bullet_weight_grains / 7000 * 0.453592
     bullet_area = 0.000506707  # Approx. for .308 bullet
     target_angle_rad = math.radians(target_angle_deg)
@@ -66,12 +88,12 @@ def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, ze
     air_density = (adjusted_pressure * 3386.39) / (287.05 * (temp_c + 273.15))
 
     # Iterative time of flight
-    time_of_flight = range_m / velocity
-    velocity_at_range = velocity * math.exp(-drag_coeff * air_density * bullet_area * range_m / (2 * bullet_mass * corrected_bc))
-    for _ in range(3):  # Three iterations for better accuracy
-        avg_velocity = (velocity + velocity_at_range) / 2
+    time_of_flight = range_m / velocity_ms
+    velocity_at_range = velocity_ms * math.exp(-drag_coeff * air_density * bullet_area * range_m / (2 * bullet_mass * corrected_bc))
+    for _ in range(3):
+        avg_velocity = (velocity_ms + velocity_at_range) / 0.2
         time_of_flight = range_m / avg_velocity
-        velocity_at_range = velocity * math.exp(-drag_coeff * air_density * bullet_area * range_m / (2 * bullet_mass * corrected_bc))
+        velocity_at_range = velocity_ms * math.exp(-drag_coeff * air_density * bullet_area * range_m / (2 * bullet_mass / corrected_bc)))
 
     velocity_at_range_fps = velocity_at_range / 0.3048
     energy_joules = 0.5 * bullet_mass * velocity_at_range ** 2
@@ -81,18 +103,20 @@ def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, ze
     drop_m = (0.5 * g * time_of_flight ** 2) * math.cos(target_angle_rad)
     zero_angle = math.atan2(drop_m + scope_height_m, zero_range_m) if zero_range_m > 0 else 0.0
     adjusted_drop_m = drop_m - range_m * math.tan(zero_angle) + scope_height_m
-    drop_in = adjusted_drop_m * 39.3701
+    drop_unit = adjusted_drop_m * 100 if use_meters else adjusted_drop_m * 39.3701  # m to cm or inches
 
-    moa_adjustment = (drop_in / (range_yards / 100)) / 1.047 if range_yards > 0 else 0.0
-    mrad_adjustment = (drop_in / (range_yards / 100)) / 3.6 if range_yards > 0 else 0.0
+    moa_adjustment = (drop_unit / (range_yards / 100)) / 1.047 if range_yards > 0 and not use_meters else (drop_unit / (range_m / 100)) / 1.047
+    mrad_adjustment = (drop_unit / (range_yards / 100)) / 3.6 if range_yards > 0 and not use_meters else (drop_unit / (range_m / 100)) / 3.6
 
-    wind_drift_in, wind_moa, wind_mrad = calculate_wind_drift(wind_speed_mph, wind_direction_deg, time_of_flight, range_yards, velocity_fps, corrected_bc, drag_model)
-    spin_drift_in = calculate_spin_drift(bullet_weight_grains, barrel_twist_in, range_yards, velocity_fps)
-    total_lateral_drift_in = wind_drift_in + spin_drift_in
-    total_lateral_moa = (total_lateral_drift_in / (range_yards / 100)) / 1.047 if range_yards > 0 else 0.0
-    total_lateral_mrad = (total_lateral_drift_in / (range_yards / 100)) / 3.6 if range_yards > 0 else 0.0
+    wind_drift_m = calculate_wind_drift(wind_speed_ms, wind_direction_deg, time_of_flight, range_m, velocity_ms, corrected_bc)
+    spin_drift_m = calculate_spin_drift(bullet_weight_grains, barrel_twist_in, range_m, velocity_ms)
+    total_lateral_drift_m = wind_drift_m + spin_drift_m
+    total_lateral_drift_unit = total_lateral_drift_m * 100 if use_meters else total_lateral_drift_m * 39.3701
 
-    return drop_in, velocity_at_range_fps, energy_ftlbs, moa_adjustment, mrad_adjustment, total_lateral_drift_in, total_lateral_moa, total_lateral_mrad
+    total_lateral_moa = (total_lateral_drift_unit / (range_yards / 100)) / 1.047 if range_yards > 0 and not use_meters else (total_lateral_drift_unit / (range_m / 100)) / 1.047
+    total_lateral_mrad = (total_lateral_drift_unit / (range_yards / 100)) / 3.6 if range_yards > 0 and not use_meters else (total_lateral_drift_unit / (range_m / 100)) / 3.6
+
+    return drop_unit, velocity_at_range_fps, energy_ftlbs, moa_adjustment, mrad_adjustment, total_lateral_drift_unit, total_lateral_moa, total_lateral_mrad
 
 # GUI Application
 class BallisticCalculator(tk.Tk):
@@ -106,7 +130,7 @@ class BallisticCalculator(tk.Tk):
 
         # Variables
         self.velocity_var = tk.StringVar(value="3000")
-        self.bc_var = tk.StringVar(value="0.500")  # Updated to match user input
+        self.bc_var = tk.StringVar(value="0.500")
         self.bullet_weight_var = tk.StringVar(value="150")
         self.range_var = tk.StringVar(value="100")
         self.zero_range_var = tk.StringVar(value="100")
@@ -129,6 +153,8 @@ class BallisticCalculator(tk.Tk):
         self.lateral_moa_var = tk.StringVar(value="0.00")
         self.lateral_mrad_var = tk.StringVar(value="0.00")
         self.drag_model_var = tk.StringVar(value="G7")
+        self.temp_unit_var = tk.StringVar(value="°C")
+        self.dist_unit_var = tk.StringVar(value="Yards")
 
         # GUI Layout
         self.create_widgets()
@@ -162,10 +188,10 @@ class BallisticCalculator(tk.Tk):
         main_container.rowconfigure(1, weight=1)
 
         # Rifle Details (Top Left)
-        ttk.Label(rifle_frame, text="Scope Height (in):").grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(rifle_frame, textvariable=self.dist_unit_var, text="Scope Height:").grid(row=0, column=0, sticky=tk.W)
         ttk.Entry(rifle_frame, textvariable=self.scope_height_var).grid(row=0, column=1, sticky=(tk.W, tk.E))
 
-        ttk.Label(rifle_frame, text="Zero Range (yd):").grid(row=1, column=0, sticky=tk.W)
+        ttk.Label(rifle_frame, textvariable=self.dist_unit_var, text="Zero Range:").grid(row=1, column=0, sticky=tk.W)
         ttk.Entry(rifle_frame, textvariable=self.zero_range_var).grid(row=1, column=1, sticky=(tk.W, tk.E))
 
         ttk.Label(rifle_frame, text="Barrel Twist (in/turn):").grid(row=2, column=0, sticky=tk.W)
@@ -190,10 +216,10 @@ class BallisticCalculator(tk.Tk):
         bullet_frame.columnconfigure(1, weight=1)
 
         # Environment Details (Bottom Left)
-        ttk.Label(env_frame, text="Range (yd):").grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(env_frame, textvariable=self.dist_unit_var, text="Range:").grid(row=0, column=0, sticky=tk.W)
         ttk.Entry(env_frame, textvariable=self.range_var).grid(row=0, column=1, sticky=(tk.W, tk.E))
 
-        ttk.Label(env_frame, text="Target Size (in):").grid(row=1, column=0, sticky=tk.W)
+        ttk.Label(env_frame, textvariable=self.dist_unit_var, text="Target Size:").grid(row=1, column=0, sticky=tk.W)
         ttk.Entry(env_frame, textvariable=self.target_size_var).grid(row=1, column=1, sticky=(tk.W, tk.E))
 
         ttk.Label(env_frame, text="Target Angle (deg):").grid(row=2, column=0, sticky=tk.W)
@@ -208,7 +234,7 @@ class BallisticCalculator(tk.Tk):
         ttk.Label(env_frame, text="Altitude (ft):").grid(row=5, column=0, sticky=tk.W)
         ttk.Entry(env_frame, textvariable=self.altitude_var).grid(row=5, column=1, sticky=(tk.W, tk.E))
 
-        ttk.Label(env_frame, text="Temperature (°C):").grid(row=6, column=0, sticky=tk.W)
+        ttk.Label(env_frame, textvariable=self.temp_unit_var, text="Temperature:").grid(row=6, column=0, sticky=tk.W)
         ttk.Label(env_frame, textvariable=self.temp_var).grid(row=6, column=1, sticky=tk.W)
 
         ttk.Label(env_frame, text="Humidity (%):").grid(row=7, column=0, sticky=tk.W)
@@ -217,10 +243,16 @@ class BallisticCalculator(tk.Tk):
         ttk.Label(env_frame, text="Pressure (inHg):").grid(row=8, column=0, sticky=tk.W)
         ttk.Label(env_frame, textvariable=self.pressure_var).grid(row=8, column=1, sticky=tk.W)
 
+        ttk.Label(env_frame, text="Units:").grid(row=9, column=0, sticky=tk.W)
+        ttk.Radiobutton(env_frame, text="°C", variable=self.temp_unit_var, value="°C", command=self.update_units).grid(row=9, column=1, sticky=tk.W)
+        ttk.Radiobutton(env_frame, text="°F", variable=self.temp_unit_var, value="°F", command=self.update_units).grid(row=9, column=1, padx=30, sticky=tk.W)
+        ttk.Radiobutton(env_frame, text="Yards", variable=self.dist_unit_var, value="Yards", command=self.update_units).grid(row=9, column=1, padx=60, sticky=tk.W)
+        ttk.Radiobutton(env_frame, text="Meters", variable=self.dist_unit_var, value="Meters", command=self.update_units).grid(row=9, column=1, padx=100, sticky=tk.W)
+
         env_frame.columnconfigure(1, weight=1)
 
         # Resulting Calculations (Bottom Right)
-        ttk.Label(result_frame, text="Bullet Drop (in):").grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(result_frame, textvariable=self.dist_unit_var, text="Bullet Drop:").grid(row=0, column=0, sticky=tk.W)
         ttk.Label(result_frame, textvariable=self.drop_var).grid(row=0, column=1, sticky=tk.W)
 
         ttk.Label(result_frame, text="Velocity at Range (fps):").grid(row=1, column=0, sticky=tk.W)
@@ -235,7 +267,7 @@ class BallisticCalculator(tk.Tk):
         ttk.Label(result_frame, text="Elevation Adjustment (MRAD):").grid(row=4, column=0, sticky=tk.W)
         ttk.Label(result_frame, textvariable=self.mrad_var).grid(row=4, column=1, sticky=tk.W)
 
-        ttk.Label(result_frame, text="Lateral Drift (in):").grid(row=5, column=0, sticky=tk.W)
+        ttk.Label(result_frame, textvariable=self.dist_unit_var, text="Lateral Drift:").grid(row=5, column=0, sticky=tk.W)
         ttk.Label(result_frame, textvariable=self.lateral_drift_var).grid(row=5, column=1, sticky=tk.W)
 
         ttk.Label(result_frame, text="Windage Adjustment (MOA):").grid(row=6, column=0, sticky=tk.W)
@@ -249,22 +281,62 @@ class BallisticCalculator(tk.Tk):
         # Calculate button
         ttk.Button(main_container, text="Calculate", command=self.calculate).grid(row=2, column=0, columnspan=2, pady=10)
 
-    def poll_sense_grid(self, drop_in, lateral_drift_in):
-        """Update Sense HAT 8x8 grid to show bullet impact point."""
+    def update_units(self):
+        """Update displayed values when units change."""
+        use_celsius = self.temp_unit_var.get() == "°C"
+        use_meters = self.dist_unit_var.get() == "Meters"
+
+        try:
+            if self.temp_var.get() != "N/A" and self.temp_var.get() != "Error":
+                temp = float(self.temp_var.get())
+                self.temp_var.set(f"{convert_temperature(temp, use_celsius):.1f}")
+
+            for var in [self.range_var, self.zero_range_var]:
+                if var.get() and var.get() != "Error":
+                    value = float(var.get())
+                    new_value = convert_distance(value, use_meters)
+                    var.set(f"{new_value:.2f}")
+
+            for var in [self.scope_height_var, self.target_size_var, self.drop_var, self.lateral_drift_var]:
+                if var.get() and var.get() != "Error" and var.get() != "0.00":
+                    value = float(var.get())
+                    new_value = convert_distance(value, use_meters, is_height=True)
+                    var.set(f"{new_value:.2f}")
+
+        except ValueError:
+            pass
+
+    def poll_sense_grid(self, moa_adjustment, lateral_moa):
+        """Update Sense HAT 8x8 grid to show elevation and windage MOA."""
         self.sense.clear()
-        # Scale 8x8 grid to 8x8 inches (1 in per pixel)
-        scale = 1.0
-        x = int(lateral_drift_in / scale) + 4  # Center at x=4
-        y = int(-drop_in / scale) + 4  # Center at y=4, negative drop (down)
-        if 0 <= x < 8 and 0 <= y < 8:
-            self.sense.set_pixel(x, y, 255, 0, 0)  # Red pixel for impact
-        else:
-            # Flash red if impact is off target
+        elev = int(round(abs(moa_adjustment)))
+        wind = int(round(abs(lateral_moa)))
+        if elev > 99 or wind > 99 or moa_adjustment < 0 or lateral_moa < 0:
+            # Flash red for invalid values
             for _ in range(2):
                 self.sense.clear(255, 0, 0)
                 time.sleep(0.5)
                 self.sense.clear()
                 time.sleep(0.5)
+            return
+
+        # Display elevation MOA (left 4 columns)
+        elev_str = f"{elev:02d}"  # Pad with leading zero
+        for i, digit in enumerate(elev_str):
+            if digit in FONT:
+                for y in range(5):
+                    for x in range(3):
+                        if FONT[digit][y][x]:
+                            self.sense.set_pixel(x + i*4, y + 1, 255, 0, 0)
+
+        # Display windage MOA (right 4 columns)
+        wind_str = f"{wind:02d}"
+        for i, digit in enumerate(wind_str):
+            if digit in FONT:
+                for y in range(5):
+                    for x in range(3):
+                        if FONT[digit][y][x]:
+                            self.sense.set_pixel(x + (i*4) + 4, y + 1, 255, 0, 0)
 
     def poll_sensors(self):
         """Continuously poll Sense HAT sensors and update GUI."""
@@ -274,7 +346,9 @@ class BallisticCalculator(tk.Tk):
                 humidity = self.sense.get_humidity()
                 pressure_mb = self.sense.get_pressure()
                 pressure_inhg = pressure_mb * 0.02953
-                self.temp_var.set(f"{temp_c:.1f}")
+                use_celsius = self.temp_unit_var.get() == "°C"
+                temp_display = temp_c if use_celsius else convert_temperature(temp_c, False)
+                self.temp_var.set(f"{temp_display:.1f}")
                 self.humidity_var.set(f"{humidity:.1f}")
                 self.pressure_var.set(f"{pressure_inhg:.2f}")
             except Exception as e:
@@ -290,8 +364,8 @@ class BallisticCalculator(tk.Tk):
             velocity = float(self.velocity_var.get())
             bc = float(self.bc_var.get())
             bullet_weight = float(self.bullet_weight_var.get())
-            range_yards = float(self.range_var.get())
-            zero_range_yards = float(self.zero_range_var.get())
+            range = float(self.range_var.get())
+            zero_range = float(self.zero_range_var.get())
             scope_height = float(self.scope_height_var.get())
             wind_speed = float(self.wind_speed_var.get())
             wind_direction = float(self.wind_direction_var.get())
@@ -299,25 +373,27 @@ class BallisticCalculator(tk.Tk):
             target_size = float(self.target_size_var.get())
             target_angle = float(self.target_angle_var.get())
             altitude = float(self.altitude_var.get())
-            temp_c = float(self.temp_var.get()) if self.temp_var.get() != "Error" else 15.0
+            temp = float(self.temp_var.get()) if self.temp_var.get() != "Error" else (15.0 if self.temp_unit_var.get() == "°C" else 59.0)
             humidity = float(self.humidity_var.get()) if self.humidity_var.get() != "Error" else 0.0
             pressure_inhg = float(self.pressure_var.get()) if self.pressure_var.get() != "Error" else 29.92
             drag_model = self.drag_model_var.get()
+            use_celsius = self.temp_unit_var.get() == "°C"
+            use_meters = self.dist_unit_var.get() == "Meters"
 
             # Input validation
-            if any(x <= 0 for x in [velocity, bc, bullet_weight, zero_range_yards, scope_height, barrel_twist, target_size]):
+            if any(x <= 0 for x in [velocity, bc, bullet_weight, zero_range, scope_height, barrel_twist, target_size]):
                 raise ValueError("Inputs must be positive (except range, angles, wind, altitude).")
             if not 0 <= wind_direction <= 360:
                 raise ValueError("Wind direction must be between 0 and 360 degrees.")
             if not 0.05 <= bc <= 1.0:
                 raise ValueError("Ballistic coefficient must be between 0.05 and 1.0.")
-            if range_yards < 0:
+            if range < 0:
                 raise ValueError("Range must be non-negative.")
             if abs(target_angle) > 90:
                 raise ValueError("Target angle must be between -90 and 90 degrees.")
 
             drop, velocity_at_range, energy, moa, mrad, lateral_drift, lateral_moa, lateral_mrad = calculate_trajectory(
-                velocity, bc, bullet_weight, range_yards, zero_range_yards, scope_height, temp_c, humidity, pressure_inhg, altitude, target_angle, drag_model, wind_speed, wind_direction, barrel_twist
+                velocity, bc, bullet_weight, range, zero_range, scope_height, temp, humidity, pressure_inhg, altitude, target_angle, drag_model, wind_speed, wind_direction, barrel_twist, use_meters, use_celsius
             )
             self.drop_var.set(f"{drop:.2f}")
             self.velocity_at_range_var.set(f"{velocity_at_range:.2f}")
@@ -329,13 +405,14 @@ class BallisticCalculator(tk.Tk):
             self.lateral_mrad_var.set(f"{lateral_mrad:.2f}")
 
             # Update Sense HAT grid
-            self.poll_sense_grid(drop, lateral_drift)
+            self.poll_sense_grid(moa, lateral_moa)
 
             # Validate target size
             if abs(drop) > target_size:
-                messagebox.showwarning("Target Warning", f"Bullet drop ({abs(drop):.2f} in) exceeds target size ({target_size:.2f} in).")
+                unit = "cm" if use_meters else "in"
+                messagebox.showwarning("Target Warning", f"Bullet drop ({abs(drop):.2f} {unit}) exceeds target size ({target_size:.2f} {unit}).")
             if abs(lateral_drift) > target_size:
-                messagebox.showwarning("Target Warning", f"Lateral drift ({abs(lateral_drift):.2f} in) exceeds target size ({target_size:.2f} in).")
+                messagebox.showwarning("Target Warning", f"Lateral drift ({abs(lateral_drift):.2f} {unit}) exceeds target size ({target_size:.2f} {unit}).")
         except ValueError as e:
             messagebox.showerror("Input Error", str(e))
             self.sense.clear()
