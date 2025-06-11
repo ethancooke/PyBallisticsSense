@@ -83,12 +83,29 @@ def calculate_wind_drift(wind_speed_ms, wind_direction_deg, time_of_flight, rang
 def calculate_trajectory(
     velocity_fps, bc, bullet_weight_grains, range_yards, zero_range_yards, scope_height_in,
     temp_c, humidity, pressure_inhg, altitude_ft, target_angle_deg, drag_model,
-    wind_speed_mph, wind_direction_deg, barrel_twist_in, use_meters, use_celsius):
+    wind_speed_mph, wind_direction_deg, barrel_twist_in, use_meters, use_celsius,
+    zero_env=None):
     """Calculate bullet drop, velocity, energy, and scope adjustments.
     - Converts all inputs to SI or imperial as needed
     - Applies environmental corrections
     - Returns drop, velocity at range, energy, MOA/MRAD adjustments, and lateral drift
+    - If at zero range and environment matches zero_env, returns zero adjustments
     """
+    # Check for zeroing condition
+    if zero_env is not None:
+        tol = 0.5  # tolerance for temp, humidity, pressure, altitude, wind
+        if (
+            abs(range_yards - zero_range_yards) < 1e-3 and
+            abs(temp_c - zero_env.get("temp", temp_c)) < tol and
+            abs(humidity - zero_env.get("humidity", humidity)) < tol and
+            abs(pressure_inhg - zero_env.get("pressure", pressure_inhg)) < tol and
+            abs(altitude_ft - zero_env.get("altitude", altitude_ft)) < tol and
+            abs(wind_speed_mph - zero_env.get("wind_speed", wind_speed_mph)) < tol and
+            abs(wind_direction_deg - zero_env.get("wind_direction", wind_direction_deg)) < tol
+        ):
+            # At zero, matching environment: all adjustments zero
+            return 0.0, velocity_fps, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+
     # Convert inputs based on units
     velocity_ms = velocity_fps * 0.3048
     range_m = convert_distance(range_yards, True) if not use_meters else range_yards
@@ -354,6 +371,9 @@ class BallisticCalculator(tk.Tk):
         - Updates result fields
         """
         try:
+            with open("defaults.json", "r") as f:
+                defaults = json.load(f)
+            zero_env = defaults.get("zero_environment", None)
             velocity = float(self.velocity_var.get())
             bc = float(self.bc_var.get())
             bullet_weight = float(self.bullet_weight_var.get())
@@ -386,7 +406,7 @@ class BallisticCalculator(tk.Tk):
                 raise ValueError("Target angle must be between -90 and 90 degrees.")
 
             drop, velocity_at_range, energy, moa, mrad, lateral_drift, lateral_moa, lateral_mrad = calculate_trajectory(
-                velocity, bc, bullet_weight, range, zero_range, scope_height, temp, humidity, pressure_inhg, altitude, target_angle, drag_model, wind_speed, wind_direction, barrel_twist, use_meters, use_celsius
+                velocity, bc, bullet_weight, range, zero_range, scope_height, temp, humidity, pressure_inhg, altitude, target_angle, drag_model, wind_speed, wind_direction, barrel_twist, use_meters, use_celsius, zero_env
             )
             self.drop_var.set(f"{drop:.2f}")
             self.velocity_at_range_var.set(f"{velocity_at_range:.2f}")
