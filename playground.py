@@ -209,120 +209,87 @@ class BallisticCalculator(tk.Tk):
         self.sensor_thread.start()
 
     def create_widgets(self):
-        """Create and layout all GUI widgets."""
+        """Create and layout all GUI widgets using grid layout with improved readability and maintainability."""
         main_container = ttk.Frame(self, padding="10")
         main_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
 
-        # Quadrants
-        rifle_frame = ttk.LabelFrame(main_container, text="Rifle Details", padding="5")
-        rifle_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
-
-        bullet_frame = ttk.LabelFrame(main_container, text="Bullet Details", padding="5")
-        bullet_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
-
-        env_frame = ttk.LabelFrame(main_container, text="Environment Details", padding="5")
-        env_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
-
-        result_frame = ttk.LabelFrame(main_container, text="Resulting Calculations", padding="5")
-        result_frame.grid(row=1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
+        # Use a dictionary to store frames for easier access and future extension
+        frames = {
+            'rifle': ttk.LabelFrame(main_container, text="Rifle Details", padding="5"),
+            'bullet': ttk.LabelFrame(main_container, text="Bullet Details", padding="5"),
+            'env': ttk.LabelFrame(main_container, text="Environment Details", padding="5"),
+            'result': ttk.LabelFrame(main_container, text="Resulting Calculations", padding="5")
+        }
+        frames['rifle'].grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        frames['bullet'].grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+        frames['env'].grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        frames['result'].grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
 
         main_container.columnconfigure(0, weight=1)
         main_container.columnconfigure(1, weight=1)
         main_container.rowconfigure(0, weight=1)
         main_container.rowconfigure(1, weight=1)
 
-        # Rifle Details (Top Left)
-        ttk.Label(rifle_frame, textvariable=self.dist_unit_var, text="Scope Height:").grid(row=0, column=0, sticky=tk.W)
-        ttk.Entry(rifle_frame, textvariable=self.scope_height_var).grid(row=0, column=1, sticky=(tk.W, tk.E))
+        # Helper for adding labeled entry
+        def add_labeled_entry(frame, label, variable, row, col=0, label_kwargs=None, entry_kwargs=None):
+            label_kwargs = label_kwargs or {}
+            entry_kwargs = entry_kwargs or {}
+            ttk.Label(frame, text=label, **label_kwargs).grid(row=row, column=col, sticky=tk.W)
+            ttk.Entry(frame, textvariable=variable, **entry_kwargs).grid(row=row, column=col+1, sticky=(tk.W, tk.E))
+            frame.columnconfigure(col+1, weight=1)
 
-        ttk.Label(rifle_frame, textvariable=self.dist_unit_var, text="Zero Range:").grid(row=1, column=0, sticky=tk.W)
-        ttk.Entry(rifle_frame, textvariable=self.zero_range_var).grid(row=1, column=1, sticky=(tk.W, tk.E))
+        # Rifle Details
+        add_labeled_entry(frames['rifle'], "Scope Height:", self.scope_height_var, 0)
+        add_labeled_entry(frames['rifle'], "Zero Range:", self.zero_range_var, 1)
+        add_labeled_entry(frames['rifle'], "Barrel Twist (in/turn):", self.barrel_twist_var, 2)
 
-        ttk.Label(rifle_frame, text="Barrel Twist (in/turn):").grid(row=2, column=0, sticky=tk.W)
-        ttk.Entry(rifle_frame, textvariable=self.barrel_twist_var).grid(row=2, column=1, sticky=(tk.W, tk.E))
+        # Bullet Details
+        add_labeled_entry(frames['bullet'], "Muzzle Velocity (fps):", self.velocity_var, 0)
+        add_labeled_entry(frames['bullet'], "Ballistic Coefficient:", self.bc_var, 1)
+        add_labeled_entry(frames['bullet'], "Bullet Weight (gr):", self.bullet_weight_var, 2)
+        ttk.Label(frames['bullet'], text="Drag Model:").grid(row=3, column=0, sticky=tk.W)
+        ttk.Radiobutton(frames['bullet'], text="G1", variable=self.drag_model_var, value="G1").grid(row=3, column=1, sticky=tk.W)
+        ttk.Radiobutton(frames['bullet'], text="G7", variable=self.drag_model_var, value="G7").grid(row=3, column=2, sticky=tk.W)
+        frames['bullet'].columnconfigure(1, weight=1)
+        frames['bullet'].columnconfigure(2, weight=1)
 
-        rifle_frame.columnconfigure(1, weight=1)
+        # Environment Details
+        add_labeled_entry(frames['env'], "Range:", self.range_var, 0)
+        add_labeled_entry(frames['env'], "Target Size:", self.target_size_var, 1)
+        add_labeled_entry(frames['env'], "Target Angle (deg):", self.target_angle_var, 2)
+        add_labeled_entry(frames['env'], "Wind Speed (mph):", self.wind_speed_var, 3)
+        add_labeled_entry(frames['env'], "Wind Direction (deg):", self.wind_direction_var, 4)
+        add_labeled_entry(frames['env'], "Altitude (ft):", self.altitude_var, 5)
+        ttk.Label(frames['env'], text="Temperature:").grid(row=6, column=0, sticky=tk.W)
+        ttk.Label(frames['env'], textvariable=self.temp_var).grid(row=6, column=1, sticky=tk.W)
+        ttk.Label(frames['env'], text="Humidity (%):").grid(row=7, column=0, sticky=tk.W)
+        ttk.Label(frames['env'], textvariable=self.humidity_var).grid(row=7, column=1, sticky=tk.W)
+        ttk.Label(frames['env'], text="Pressure (inHg):").grid(row=8, column=0, sticky=tk.W)
+        ttk.Label(frames['env'], textvariable=self.pressure_var).grid(row=8, column=1, sticky=tk.W)
+        # Unit selection
+        ttk.Label(frames['env'], text="Units:").grid(row=9, column=0, sticky=tk.W)
+        ttk.Radiobutton(frames['env'], text="°C", variable=self.temp_unit_var, value="°C", command=self.update_units).grid(row=9, column=1, sticky=tk.W)
+        ttk.Radiobutton(frames['env'], text="°F", variable=self.temp_unit_var, value="°F", command=self.update_units).grid(row=9, column=2, sticky=tk.W)
+        ttk.Radiobutton(frames['env'], text="Yards", variable=self.dist_unit_var, value="Yards", command=self.update_units).grid(row=9, column=3, sticky=tk.W)
+        ttk.Radiobutton(frames['env'], text="Meters", variable=self.dist_unit_var, value="Meters", command=self.update_units).grid(row=9, column=4, sticky=tk.W)
+        for i in range(1, 5):
+            frames['env'].columnconfigure(i, weight=1)
 
-        # Bullet Details (Top Right)
-        ttk.Label(bullet_frame, text="Muzzle Velocity (fps):").grid(row=0, column=0, sticky=tk.W)
-        ttk.Entry(bullet_frame, textvariable=self.velocity_var).grid(row=0, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(bullet_frame, text="Ballistic Coefficient:").grid(row=1, column=0, sticky=tk.W)
-        ttk.Entry(bullet_frame, textvariable=self.bc_var).grid(row=1, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(bullet_frame, text="Bullet Weight (gr):").grid(row=2, column=0, sticky=tk.W)
-        ttk.Entry(bullet_frame, textvariable=self.bullet_weight_var).grid(row=2, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(bullet_frame, text="Drag Model:").grid(row=3, column=0, sticky=tk.W)
-        ttk.Radiobutton(bullet_frame, text="G1", variable=self.drag_model_var, value="G1").grid(row=3, column=1, sticky=tk.W)
-        ttk.Radiobutton(bullet_frame, text="G7", variable=self.drag_model_var, value="G7").grid(row=3, column=1, sticky=tk.E)
-
-        bullet_frame.columnconfigure(1, weight=1)
-
-        # Environment Details (Bottom Left)
-        ttk.Label(env_frame, textvariable=self.dist_unit_var, text="Range:").grid(row=0, column=0, sticky=tk.W)
-        ttk.Entry(env_frame, textvariable=self.range_var).grid(row=0, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(env_frame, textvariable=self.dist_unit_var, text="Target Size:").grid(row=1, column=0, sticky=tk.W)
-        ttk.Entry(env_frame, textvariable=self.target_size_var).grid(row=1, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(env_frame, text="Target Angle (deg):").grid(row=2, column=0, sticky=tk.W)
-        ttk.Entry(env_frame, textvariable=self.target_angle_var).grid(row=2, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(env_frame, text="Wind Speed (mph):").grid(row=3, column=0, sticky=tk.W)
-        ttk.Entry(env_frame, textvariable=self.wind_speed_var).grid(row=3, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(env_frame, text="Wind Direction (deg):").grid(row=4, column=0, sticky=tk.W)
-        ttk.Entry(env_frame, textvariable=self.wind_direction_var).grid(row=4, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(env_frame, text="Altitude (ft):").grid(row=5, column=0, sticky=tk.W)
-        ttk.Entry(env_frame, textvariable=self.altitude_var).grid(row=5, column=1, sticky=(tk.W, tk.E))
-
-        ttk.Label(env_frame, textvariable=self.temp_unit_var, text="Temperature:").grid(row=6, column=0, sticky=tk.W)
-        ttk.Label(env_frame, textvariable=self.temp_var).grid(row=6, column=1, sticky=tk.W)
-
-        ttk.Label(env_frame, text="Humidity (%):").grid(row=7, column=0, sticky=tk.W)
-        ttk.Label(env_frame, textvariable=self.humidity_var).grid(row=7, column=1, sticky=tk.W)
-
-        ttk.Label(env_frame, text="Pressure (inHg):").grid(row=8, column=0, sticky=tk.W)
-        ttk.Label(env_frame, textvariable=self.pressure_var).grid(row=8, column=1, sticky=tk.W)
-
-        ttk.Label(env_frame, text="Units:").grid(row=9, column=0, sticky=tk.W)
-        ttk.Radiobutton(env_frame, text="°C", variable=self.temp_unit_var, value="°C", command=self.update_units).grid(row=9, column=1, sticky=tk.W)
-        ttk.Radiobutton(env_frame, text="°F", variable=self.temp_unit_var, value="°F", command=self.update_units).grid(row=9, column=1, padx=30, sticky=tk.W)
-        ttk.Radiobutton(env_frame, text="Yards", variable=self.dist_unit_var, value="Yards", command=self.update_units).grid(row=9, column=1, padx=60, sticky=tk.W)
-        ttk.Radiobutton(env_frame, text="Meters", variable=self.dist_unit_var, value="Meters", command=self.update_units).grid(row=9, column=1, padx=100, sticky=tk.W)
-
-        env_frame.columnconfigure(1, weight=1)
-
-        # Resulting Calculations (Bottom Right)
-        ttk.Label(result_frame, textvariable=self.dist_unit_var, text="Bullet Drop:").grid(row=0, column=0, sticky=tk.W)
-        ttk.Label(result_frame, textvariable=self.drop_var).grid(row=0, column=1, sticky=tk.W)
-
-        ttk.Label(result_frame, text="Velocity at Range (fps):").grid(row=1, column=0, sticky=tk.W)
-        ttk.Label(result_frame, textvariable=self.velocity_at_range_var).grid(row=1, column=1, sticky=tk.W)
-
-        ttk.Label(result_frame, text="Energy at Range (ft-lbs):").grid(row=2, column=0, sticky=tk.W)
-        ttk.Label(result_frame, textvariable=self.energy_var).grid(row=2, column=1, sticky=tk.W)
-
-        ttk.Label(result_frame, text="Elevation Adjustment (MOA):").grid(row=3, column=0, sticky=tk.W)
-        ttk.Label(result_frame, textvariable=self.moa_var).grid(row=3, column=1, sticky=tk.W)
-
-        ttk.Label(result_frame, text="Elevation Adjustment (MRAD):").grid(row=4, column=0, sticky=tk.W)
-        ttk.Label(result_frame, textvariable=self.mrad_var).grid(row=4, column=1, sticky=tk.W)
-
-        ttk.Label(result_frame, textvariable=self.dist_unit_var, text="Lateral Drift:").grid(row=5, column=0, sticky=tk.W)
-        ttk.Label(result_frame, textvariable=self.lateral_drift_var).grid(row=5, column=1, sticky=tk.W)
-
-        ttk.Label(result_frame, text="Windage Adjustment (MOA):").grid(row=6, column=0, sticky=tk.W)
-        ttk.Label(result_frame, textvariable=self.lateral_moa_var).grid(row=6, column=1, sticky=tk.W)
-
-        ttk.Label(result_frame, text="Windage Adjustment (MRAD):").grid(row=7, column=0, sticky=tk.W)
-        ttk.Label(result_frame, textvariable=self.lateral_mrad_var).grid(row=7, column=1, sticky=tk.W)
-
-        result_frame.columnconfigure(1, weight=1)
+        # Resulting Calculations
+        def add_labeled_result(frame, label, variable, row, col=0):
+            ttk.Label(frame, text=label).grid(row=row, column=col, sticky=tk.W)
+            ttk.Label(frame, textvariable=variable).grid(row=row, column=col+1, sticky=tk.W)
+            frame.columnconfigure(col+1, weight=1)
+        add_labeled_result(frames['result'], "Bullet Drop:", self.drop_var, 0)
+        add_labeled_result(frames['result'], "Velocity at Range (fps):", self.velocity_at_range_var, 1)
+        add_labeled_result(frames['result'], "Energy at Range (ft-lbs):", self.energy_var, 2)
+        add_labeled_result(frames['result'], "Elevation Adjustment (MOA):", self.moa_var, 3)
+        add_labeled_result(frames['result'], "Elevation Adjustment (MRAD):", self.mrad_var, 4)
+        add_labeled_result(frames['result'], "Lateral Drift:", self.lateral_drift_var, 5)
+        add_labeled_result(frames['result'], "Windage Adjustment (MOA):", self.lateral_moa_var, 6)
+        add_labeled_result(frames['result'], "Windage Adjustment (MRAD):", self.lateral_mrad_var, 7)
 
         # Calculate button
         ttk.Button(main_container, text="Calculate", command=self.calculate).grid(row=2, column=0, columnspan=2, pady=10)
