@@ -161,6 +161,23 @@ class BallisticCalculator(tk.Tk):
     - Polls Sense HAT sensors in a background thread
     - Updates Sense HAT grid with elevation/windage MOA
     """
+    def _init_vars(self, defaults):
+        """Initialize all StringVars in a single dictionary for easier management."""
+        self.vars = {}
+        # Define all variable groups and their keys
+        var_map = {
+            'rifle': ["scope_height", "zero_range", "barrel_twist"],
+            'bullet': ["velocity", "bc", "weight", "drag_model"],
+            'environment_user': ["range", "target_size", "target_angle", "wind_speed", "wind_direction", "altitude"],
+            'environment_sensor': ["temp", "humidity", "pressure"],
+            'output': ["drop", "velocity_at_range", "energy", "moa", "mrad", "lateral_drift", "lateral_moa", "lateral_mrad"],
+            'units': ["temp_unit", "dist_unit"]
+        }
+        for section, keys in var_map.items():
+            for key in keys:
+                value = str(defaults[section][key]) if section in defaults and key in defaults[section] else ""
+                self.vars[key] = tk.StringVar(value=value)
+
     def __init__(self):
         super().__init__()
         self.title("Ballistic Calculator")
@@ -173,55 +190,40 @@ class BallisticCalculator(tk.Tk):
         with open("defaults.json", "r") as f:
             defaults = json.load(f)
 
-        # -------------------
-        # Rifle Variables
-        # -------------------
-        self.scope_height_var = tk.StringVar(value=str(defaults["rifle"]["scope_height"]))
-        self.zero_range_var = tk.StringVar(value=str(defaults["rifle"]["zero_range"]))
-        self.barrel_twist_var = tk.StringVar(value=str(defaults["rifle"]["barrel_twist"]))
+        self._init_vars(defaults)
 
-        # -------------------
-        # Bullet Variables
-        # -------------------
-        self.velocity_var = tk.StringVar(value=str(defaults["bullet"]["velocity"]))
-        self.bc_var = tk.StringVar(value=str(defaults["bullet"]["bc"]))
-        self.bullet_weight_var = tk.StringVar(value=str(defaults["bullet"]["weight"]))
-        self.drag_model_var = tk.StringVar(value=defaults["bullet"]["drag_model"])
-
-        # -------------------
-        # Environment Variables (User Input)
-        # -------------------
-        self.range_var = tk.StringVar(value=str(defaults["environment_user"]["range"]))
-        self.target_size_var = tk.StringVar(value=str(defaults["environment_user"]["target_size"]))
-        self.target_angle_var = tk.StringVar(value=str(defaults["environment_user"]["target_angle"]))
-        self.wind_speed_var = tk.StringVar(value=str(defaults["environment_user"]["wind_speed"]))
-        self.wind_direction_var = tk.StringVar(value=str(defaults["environment_user"]["wind_direction"]))
-        self.altitude_var = tk.StringVar(value=str(defaults["environment_user"]["altitude"]))
-
-        # -------------------
-        # Environment Variables (From Sensors)
-        # -------------------
-        self.temp_var = tk.StringVar(value=defaults["environment_sensor"]["temp"])
-        self.humidity_var = tk.StringVar(value=defaults["environment_sensor"]["humidity"])
-        self.pressure_var = tk.StringVar(value=defaults["environment_sensor"]["pressure"])
-
-        # -------------------
-        # Output/Result Variables
-        # -------------------
-        self.drop_var = tk.StringVar(value=str(defaults["output"]["drop"]))
-        self.velocity_at_range_var = tk.StringVar(value=str(defaults["output"]["velocity_at_range"]))
-        self.energy_var = tk.StringVar(value=str(defaults["output"]["energy"]))
-        self.moa_var = tk.StringVar(value=str(defaults["output"]["moa"]))
-        self.mrad_var = tk.StringVar(value=str(defaults["output"]["mrad"]))
-        self.lateral_drift_var = tk.StringVar(value=str(defaults["output"]["lateral_drift"]))
-        self.lateral_moa_var = tk.StringVar(value=str(defaults["output"]["lateral_moa"]))
-        self.lateral_mrad_var = tk.StringVar(value=str(defaults["output"]["lateral_mrad"]))
-
-        # -------------------
-        # Unit Selection Variables
-        # -------------------
-        self.temp_unit_var = tk.StringVar(value=defaults["units"]["temp_unit"])
-        self.dist_unit_var = tk.StringVar(value=defaults["units"]["dist_unit"])
+        # Rifle
+        self.rifle_scope_height = self.vars["scope_height"]
+        self.rifle_zero_range = self.vars["zero_range"]
+        self.rifle_barrel_twist = self.vars["barrel_twist"]
+        # Bullet
+        self.bullet_velocity = self.vars["velocity"]
+        self.bullet_bc = self.vars["bc"]
+        self.bullet_weight = self.vars["weight"]
+        self.bullet_drag_model = self.vars["drag_model"]
+        # Environment (User Input)
+        self.env_range = self.vars["range"]
+        self.env_target_size = self.vars["target_size"]
+        self.env_target_angle = self.vars["target_angle"]
+        self.env_wind_speed = self.vars["wind_speed"]
+        self.env_wind_direction = self.vars["wind_direction"]
+        self.env_altitude = self.vars["altitude"]
+        # Environment (Sensors)
+        self.env_temp = self.vars["temp"]
+        self.env_humidity = self.vars["humidity"]
+        self.env_pressure = self.vars["pressure"]
+        # Output/Results
+        self.result_drop = self.vars["drop"]
+        self.result_velocity_at_range = self.vars["velocity_at_range"]
+        self.result_energy = self.vars["energy"]
+        self.result_moa = self.vars["moa"]
+        self.result_mrad = self.vars["mrad"]
+        self.result_lateral_drift = self.vars["lateral_drift"]
+        self.result_lateral_moa = self.vars["lateral_moa"]
+        self.result_lateral_mrad = self.vars["lateral_mrad"]
+        # Units
+        self.unit_temp = self.vars["temp_unit"]
+        self.unit_dist = self.vars["dist_unit"]
 
         # GUI Layout
         self.create_widgets()
@@ -263,39 +265,39 @@ class BallisticCalculator(tk.Tk):
             frame.columnconfigure(col+1, weight=1)
 
         # Rifle Details
-        add_labeled_entry(frames['rifle'], "Scope Height:", self.scope_height_var, 0)
-        add_labeled_entry(frames['rifle'], "Zero Range:", self.zero_range_var, 1)
-        add_labeled_entry(frames['rifle'], "Barrel Twist (in/turn):", self.barrel_twist_var, 2)
+        add_labeled_entry(frames['rifle'], "Scope Height:", self.rifle_scope_height, 0)
+        add_labeled_entry(frames['rifle'], "Zero Range:", self.rifle_zero_range, 1)
+        add_labeled_entry(frames['rifle'], "Barrel Twist (in/turn):", self.rifle_barrel_twist, 2)
 
         # Bullet Details
-        add_labeled_entry(frames['bullet'], "Muzzle Velocity (fps):", self.velocity_var, 0)
-        add_labeled_entry(frames['bullet'], "Ballistic Coefficient:", self.bc_var, 1)
-        add_labeled_entry(frames['bullet'], "Bullet Weight (gr):", self.bullet_weight_var, 2)
+        add_labeled_entry(frames['bullet'], "Muzzle Velocity (fps):", self.bullet_velocity, 0)
+        add_labeled_entry(frames['bullet'], "Ballistic Coefficient:", self.bullet_bc, 1)
+        add_labeled_entry(frames['bullet'], "Bullet Weight (gr):", self.bullet_weight, 2)
         ttk.Label(frames['bullet'], text="Drag Model:").grid(row=3, column=0, sticky=tk.W)
-        ttk.Radiobutton(frames['bullet'], text="G1", variable=self.drag_model_var, value="G1").grid(row=3, column=1, sticky=tk.W)
-        ttk.Radiobutton(frames['bullet'], text="G7", variable=self.drag_model_var, value="G7").grid(row=3, column=2, sticky=tk.W)
+        ttk.Radiobutton(frames['bullet'], text="G1", variable=self.bullet_drag_model, value="G1").grid(row=3, column=1, sticky=tk.W)
+        ttk.Radiobutton(frames['bullet'], text="G7", variable=self.bullet_drag_model, value="G7").grid(row=3, column=2, sticky=tk.W)
         frames['bullet'].columnconfigure(1, weight=1)
         frames['bullet'].columnconfigure(2, weight=1)
 
         # Environment Details
-        add_labeled_entry(frames['env'], "Range:", self.range_var, 0)
-        add_labeled_entry(frames['env'], "Target Size:", self.target_size_var, 1)
-        add_labeled_entry(frames['env'], "Target Angle (deg):", self.target_angle_var, 2)
-        add_labeled_entry(frames['env'], "Wind Speed (mph):", self.wind_speed_var, 3)
-        add_labeled_entry(frames['env'], "Wind Direction (deg):", self.wind_direction_var, 4)
-        add_labeled_entry(frames['env'], "Altitude (ft):", self.altitude_var, 5)
+        add_labeled_entry(frames['env'], "Range:", self.env_range, 0)
+        add_labeled_entry(frames['env'], "Target Size:", self.env_target_size, 1)
+        add_labeled_entry(frames['env'], "Target Angle (deg):", self.env_target_angle, 2)
+        add_labeled_entry(frames['env'], "Wind Speed (mph):", self.env_wind_speed, 3)
+        add_labeled_entry(frames['env'], "Wind Direction (deg):", self.env_wind_direction, 4)
+        add_labeled_entry(frames['env'], "Altitude (ft):", self.env_altitude, 5)
         ttk.Label(frames['env'], text="Temperature:").grid(row=6, column=0, sticky=tk.W)
-        ttk.Label(frames['env'], textvariable=self.temp_var).grid(row=6, column=1, sticky=tk.W)
+        ttk.Label(frames['env'], textvariable=self.env_temp).grid(row=6, column=1, sticky=tk.W)
         ttk.Label(frames['env'], text="Humidity (%):").grid(row=7, column=0, sticky=tk.W)
-        ttk.Label(frames['env'], textvariable=self.humidity_var).grid(row=7, column=1, sticky=tk.W)
+        ttk.Label(frames['env'], textvariable=self.env_humidity).grid(row=7, column=1, sticky=tk.W)
         ttk.Label(frames['env'], text="Pressure (inHg):").grid(row=8, column=0, sticky=tk.W)
-        ttk.Label(frames['env'], textvariable=self.pressure_var).grid(row=8, column=1, sticky=tk.W)
+        ttk.Label(frames['env'], textvariable=self.env_pressure).grid(row=8, column=1, sticky=tk.W)
         # Unit selection
         ttk.Label(frames['env'], text="Units:").grid(row=9, column=0, sticky=tk.W)
-        ttk.Radiobutton(frames['env'], text="°C", variable=self.temp_unit_var, value="°C", command=self.update_units).grid(row=9, column=1, sticky=tk.W)
-        ttk.Radiobutton(frames['env'], text="°F", variable=self.temp_unit_var, value="°F", command=self.update_units).grid(row=9, column=2, sticky=tk.W)
-        ttk.Radiobutton(frames['env'], text="Yards", variable=self.dist_unit_var, value="Yards", command=self.update_units).grid(row=9, column=3, sticky=tk.W)
-        ttk.Radiobutton(frames['env'], text="Meters", variable=self.dist_unit_var, value="Meters", command=self.update_units).grid(row=9, column=4, sticky=tk.W)
+        ttk.Radiobutton(frames['env'], text="°C", variable=self.unit_temp, value="°C", command=self.update_units).grid(row=9, column=1, sticky=tk.W)
+        ttk.Radiobutton(frames['env'], text="°F", variable=self.unit_temp, value="°F", command=self.update_units).grid(row=9, column=2, sticky=tk.W)
+        ttk.Radiobutton(frames['env'], text="Yards", variable=self.unit_dist, value="Yards", command=self.update_units).grid(row=9, column=3, sticky=tk.W)
+        ttk.Radiobutton(frames['env'], text="Meters", variable=self.unit_dist, value="Meters", command=self.update_units).grid(row=9, column=4, sticky=tk.W)
         for i in range(1, 5):
             frames['env'].columnconfigure(i, weight=1)
 
@@ -304,35 +306,38 @@ class BallisticCalculator(tk.Tk):
             ttk.Label(frame, text=label).grid(row=row, column=col, sticky=tk.W)
             ttk.Label(frame, textvariable=variable).grid(row=row, column=col+1, sticky=tk.W)
             frame.columnconfigure(col+1, weight=1)
-        add_labeled_result(frames['result'], "Bullet Drop:", self.drop_var, 0)
-        add_labeled_result(frames['result'], "Velocity at Range (fps):", self.velocity_at_range_var, 1)
-        add_labeled_result(frames['result'], "Energy at Range (ft-lbs):", self.energy_var, 2)
-        add_labeled_result(frames['result'], "Elevation Adjustment (MOA):", self.moa_var, 3)
-        add_labeled_result(frames['result'], "Elevation Adjustment (MRAD):", self.mrad_var, 4)
-        add_labeled_result(frames['result'], "Lateral Drift:", self.lateral_drift_var, 5)
-        add_labeled_result(frames['result'], "Windage Adjustment (MOA):", self.lateral_moa_var, 6)
-        add_labeled_result(frames['result'], "Windage Adjustment (MRAD):", self.lateral_mrad_var, 7)
+        add_labeled_result(frames['result'], "Bullet Drop:", self.result_drop, 0)
+        add_labeled_result(frames['result'], "Velocity at Range (fps):", self.result_velocity_at_range, 1)
+        add_labeled_result(frames['result'], "Energy at Range (ft-lbs):", self.result_energy, 2)
+        add_labeled_result(frames['result'], "Elevation Adjustment (MOA):", self.result_moa, 3)
+        add_labeled_result(frames['result'], "Elevation Adjustment (MRAD):", self.result_mrad, 4)
+        add_labeled_result(frames['result'], "Lateral Drift:", self.result_lateral_drift, 5)
+        add_labeled_result(frames['result'], "Windage Adjustment (MOA):", self.result_lateral_moa, 6)
+        add_labeled_result(frames['result'], "Windage Adjustment (MRAD):", self.result_lateral_mrad, 7)
 
         # Calculate button
         ttk.Button(main_container, text="Calculate", command=self.calculate).grid(row=2, column=0, columnspan=2, pady=10)
 
     def update_units(self):
         """Update displayed values when units change (°C/°F, yards/meters)."""
-        use_celsius = self.temp_unit_var.get() == "°C"
-        use_meters = self.dist_unit_var.get() == "Meters"
+        use_celsius = self.unit_temp.get() == "°C"
+        use_meters = self.unit_dist.get() == "Meters"
 
         try:
-            if self.temp_var.get() != "N/A" and self.temp_var.get() != "Error":
-                temp = float(self.temp_var.get())
-                self.temp_var.set(f"{convert_temperature(temp, use_celsius):.1f}")
+            # Temperature
+            if self.env_temp.get() != "N/A" and self.env_temp.get() != "Error":
+                temp = float(self.env_temp.get())
+                self.env_temp.set(f"{convert_temperature(temp, use_celsius):.1f}")
 
-            for var in [self.range_var, self.zero_range_var]:
+            # Distance variables (range, zero_range)
+            for var in [self.env_range, self.rifle_zero_range]:
                 if var.get() and var.get() != "Error":
                     value = float(var.get())
                     new_value = convert_distance(value, use_meters)
                     var.set(f"{new_value:.2f}")
 
-            for var in [self.scope_height_var, self.target_size_var, self.drop_var, self.lateral_drift_var]:
+            # Height/size variables (scope_height, target_size, drop, lateral_drift)
+            for var in [self.rifle_scope_height, self.env_target_size, self.result_drop, self.result_lateral_drift]:
                 if var.get() and var.get() != "Error" and var.get() != "0.00":
                     value = float(var.get())
                     new_value = convert_distance(value, use_meters, is_height=True)
@@ -352,15 +357,15 @@ class BallisticCalculator(tk.Tk):
                 humidity = self.sense.get_humidity()
                 pressure_mb = self.sense.get_pressure()
                 pressure_inhg = pressure_mb * 0.02953
-                use_celsius = self.temp_unit_var.get() == "°C"
+                use_celsius = self.unit_temp.get() == "°C"
                 temp_display = temp_c if use_celsius else convert_temperature(temp_c, False)
-                self.temp_var.set(f"{temp_display:.1f}")
-                self.humidity_var.set(f"{humidity:.1f}")
-                self.pressure_var.set(f"{pressure_inhg:.2f}")
+                self.env_temp.set(f"{temp_display:.1f}")
+                self.env_humidity.set(f"{humidity:.1f}")
+                self.env_pressure.set(f"{pressure_inhg:.2f}")
             except Exception as e:
-                self.temp_var.set("Error")
-                self.humidity_var.set("Error")
-                self.pressure_var.set("Error")
+                self.env_temp.set("Error")
+                self.env_humidity.set("Error")
+                self.env_pressure.set("Error")
                 print(f"Sensor error: {e}")
             time.sleep(2)
 
@@ -374,24 +379,24 @@ class BallisticCalculator(tk.Tk):
             with open("defaults.json", "r") as f:
                 defaults = json.load(f)
             zero_env = defaults.get("zero_environment", None)
-            velocity = float(self.velocity_var.get())
-            bc = float(self.bc_var.get())
-            bullet_weight = float(self.bullet_weight_var.get())
-            range = float(self.range_var.get())
-            zero_range = float(self.zero_range_var.get())
-            scope_height = float(self.scope_height_var.get())
-            wind_speed = float(self.wind_speed_var.get())
-            wind_direction = float(self.wind_direction_var.get())
-            barrel_twist = float(self.barrel_twist_var.get())
-            target_size = float(self.target_size_var.get())
-            target_angle = float(self.target_angle_var.get())
-            altitude = float(self.altitude_var.get())
-            temp = float(self.temp_var.get()) if self.temp_var.get() != "Error" else (15.0 if self.temp_unit_var.get() == "°C" else 59.0)
-            humidity = float(self.humidity_var.get()) if self.humidity_var.get() != "Error" else 0.0
-            pressure_inhg = float(self.pressure_var.get()) if self.pressure_var.get() != "Error" else 29.92
-            drag_model = self.drag_model_var.get()
-            use_celsius = self.temp_unit_var.get() == "°C"
-            use_meters = self.dist_unit_var.get() == "Meters"
+            velocity = float(self.bullet_velocity.get())
+            bc = float(self.bullet_bc.get())
+            bullet_weight = float(self.bullet_weight.get())
+            range_ = float(self.env_range.get())
+            zero_range = float(self.rifle_zero_range.get())
+            scope_height = float(self.rifle_scope_height.get())
+            wind_speed = float(self.env_wind_speed.get())
+            wind_direction = float(self.env_wind_direction.get())
+            barrel_twist = float(self.rifle_barrel_twist.get())
+            target_size = float(self.env_target_size.get())
+            target_angle = float(self.env_target_angle.get())
+            altitude = float(self.env_altitude.get())
+            temp = float(self.env_temp.get()) if self.env_temp.get() != "Error" else (15.0 if self.unit_temp.get() == "°C" else 59.0)
+            humidity = float(self.env_humidity.get()) if self.env_humidity.get() != "Error" else 0.0
+            pressure_inhg = float(self.env_pressure.get()) if self.env_pressure.get() != "Error" else 29.92
+            drag_model = self.bullet_drag_model.get()
+            use_celsius = self.unit_temp.get() == "°C"
+            use_meters = self.unit_dist.get() == "Meters"
 
             # Input validation
             if any(x <= 0 for x in [velocity, bc, bullet_weight, zero_range, scope_height, barrel_twist, target_size]):
@@ -400,22 +405,22 @@ class BallisticCalculator(tk.Tk):
                 raise ValueError("Wind direction must be between 0 and 360 degrees.")
             if not 0.05 <= bc <= 1.0:
                 raise ValueError("Ballistic coefficient must be between 0.05 and 1.0.")
-            if range < 0:
+            if range_ < 0:
                 raise ValueError("Range must be non-negative.")
             if abs(target_angle) > 90:
                 raise ValueError("Target angle must be between -90 and 90 degrees.")
 
             drop, velocity_at_range, energy, moa, mrad, lateral_drift, lateral_moa, lateral_mrad = calculate_trajectory(
-                velocity, bc, bullet_weight, range, zero_range, scope_height, temp, humidity, pressure_inhg, altitude, target_angle, drag_model, wind_speed, wind_direction, barrel_twist, use_meters, use_celsius, zero_env
+                velocity, bc, bullet_weight, range_, zero_range, scope_height, temp, humidity, pressure_inhg, altitude, target_angle, drag_model, wind_speed, wind_direction, barrel_twist, use_meters, use_celsius, zero_env
             )
-            self.drop_var.set(f"{drop:.2f}")
-            self.velocity_at_range_var.set(f"{velocity_at_range:.2f}")
-            self.energy_var.set(f"{energy:.2f}")
-            self.moa_var.set(f"{moa:.2f}")
-            self.mrad_var.set(f"{mrad:.2f}")
-            self.lateral_drift_var.set(f"{lateral_drift:.2f}")
-            self.lateral_moa_var.set(f"{lateral_moa:.2f}")
-            self.lateral_mrad_var.set(f"{lateral_mrad:.2f}")
+            self.result_drop.set(f"{drop:.2f}")
+            self.result_velocity_at_range.set(f"{velocity_at_range:.2f}")
+            self.result_energy.set(f"{energy:.2f}")
+            self.result_moa.set(f"{moa:.2f}")
+            self.result_mrad.set(f"{mrad:.2f}")
+            self.result_lateral_drift.set(f"{lateral_drift:.2f}")
+            self.result_lateral_moa.set(f"{lateral_moa:.2f}")
+            self.result_lateral_mrad.set(f"{lateral_mrad:.2f}")
 
         except ValueError as e:
             messagebox.showerror("Input Error", str(e))
