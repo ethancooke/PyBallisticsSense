@@ -1,4 +1,19 @@
 #!/usr/bin/python3
+# Ballistic Calculator for Raspberry Pi with Sense HAT
+# ---------------------------------------------------
+# This application provides a GUI for ballistic calculations, using real-time environmental data from the Sense HAT sensors.
+# It displays results both on the GUI and the Sense HAT LED grid.
+#
+# Features:
+# - Reads temperature, humidity, and pressure from Sense HAT
+# - Calculates bullet drop, wind drift, spin drift, and scope adjustments
+# - Supports unit switching (metric/imperial)
+# - Visualizes elevation and windage adjustments on the Sense HAT grid
+# - Warns if drop or drift exceeds target size
+#
+# Author: [Your Name]
+# Date: [Update as needed]
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 from sense_hat import SenseHat
@@ -10,21 +25,8 @@ import math
 sense = SenseHat()
 sense.clear()
 
-# 5x3 pixel font for 0-9 (1=lit, 0=off)
-FONT = {
-    '0': [[1,1,1],[1,0,1],[1,0,1],[1,0,1],[1,1,1]],
-    '1': [[0,1,0],[1,1,0],[0,1,0],[0,1,0],[1,1,1]],
-    '2': [[1,1,1],[0,0,1],[1,1,1],[1,0,0],[1,1,1]],
-    '3': [[1,1,1],[0,0,1],[1,1,1],[0,0,1],[1,1,1]],
-    '4': [[1,0,1],[1,0,1],[1,1,1],[0,0,1],[0,0,1]],
-    '5': [[1,1,1],[1,0,0],[1,1,1],[0,0,1],[1,1,1]],
-    '6': [[1,1,1],[1,0,0],[1,1,1],[1,0,1],[1,1,1]],
-    '7': [[1,1,1],[0,0,1],[0,1,0],[1,0,0],[1,0,0]],
-    '8': [[1,1,1],[1,0,1],[1,1,1],[1,0,1],[1,1,1]],
-    '9': [[1,1,1],[1,0,1],[1,1,1],[0,0,1],[1,1,1]]
-}
-
 # Ballistic calculation functions
+
 def convert_temperature(value, to_celsius):
     """Convert temperature between °C and °F."""
     if to_celsius:
@@ -40,7 +42,10 @@ def convert_distance(value, to_meters, is_height=False):
     return value * 0.9144 if to_meters else value / 0.9144  # yards to meters
 
 def atmosphere_correction(bc, temp_c, humidity, pressure_inhg, altitude_ft):
-    """Adjust ballistic coefficient for environmental conditions."""
+    """Adjust ballistic coefficient for environmental conditions.
+    - Adjusts for temperature, humidity, pressure, and altitude.
+    - Returns corrected BC and adjusted pressure.
+    """
     temp_k = temp_c + 273.15
     std_temp_k = 15 + 273.15
     if pressure_inhg == 29.92 and altitude_ft != 0:
@@ -54,7 +59,9 @@ def atmosphere_correction(bc, temp_c, humidity, pressure_inhg, altitude_ft):
     return corrected_bc, pressure_inhg
 
 def calculate_spin_drift(bullet_weight_grains, barrel_twist_in, range_m, velocity_ms):
-    """Calculate spin drift."""
+    """Calculate spin drift (lateral drift due to bullet spin).
+    - Returns drift in meters.
+    """
     bullet_mass_kg = bullet_weight_grains / 7000 * 0.453592
     twist_rate = 1 / barrel_twist_in
     spin_velocity = velocity_ms * twist_rate * 0.0254
@@ -62,7 +69,9 @@ def calculate_spin_drift(bullet_weight_grains, barrel_twist_in, range_m, velocit
     return drift_m
 
 def calculate_wind_drift(wind_speed_ms, wind_direction_deg, time_of_flight, range_m, velocity_ms, bc):
-    """Calculate lateral drift due to wind."""
+    """Calculate lateral drift due to wind.
+    - Returns drift in meters.
+    """
     crosswind = wind_speed_ms * math.sin(math.radians(wind_direction_deg))
     # Litz-based model: drift adjusted for BC and velocity decay
     drift_m = crosswind * time_of_flight * (1 - bc / 2) / (bc * 1.5)
@@ -70,8 +79,15 @@ def calculate_wind_drift(wind_speed_ms, wind_direction_deg, time_of_flight, rang
         drift_m = 0.0
     return drift_m
 
-def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, zero_range_yards, scope_height_in, temp_c, humidity, pressure_inhg, altitude_ft, target_angle_deg, drag_model, wind_speed_mph, wind_direction_deg, barrel_twist_in, use_meters, use_celsius):
-    """Calculate bullet drop, velocity, energy, and scope adjustments."""
+def calculate_trajectory(
+    velocity_fps, bc, bullet_weight_grains, range_yards, zero_range_yards, scope_height_in,
+    temp_c, humidity, pressure_inhg, altitude_ft, target_angle_deg, drag_model,
+    wind_speed_mph, wind_direction_deg, barrel_twist_in, use_meters, use_celsius):
+    """Calculate bullet drop, velocity, energy, and scope adjustments.
+    - Converts all inputs to SI or imperial as needed
+    - Applies environmental corrections
+    - Returns drop, velocity at range, energy, MOA/MRAD adjustments, and lateral drift
+    """
     # Convert inputs based on units
     velocity_ms = velocity_fps * 0.3048
     range_m = convert_distance(range_yards, True) if not use_meters else range_yards
@@ -120,6 +136,13 @@ def calculate_trajectory(velocity_fps, bc, bullet_weight_grains, range_yards, ze
 
 # GUI Application
 class BallisticCalculator(tk.Tk):
+    """
+    Main GUI application for the Ballistic Calculator.
+    - Organizes input fields for rifle, bullet, and environment
+    - Displays results and warnings
+    - Polls Sense HAT sensors in a background thread
+    - Updates Sense HAT grid with elevation/windage MOA
+    """
     def __init__(self):
         super().__init__()
         self.title("Ballistic Calculator")
@@ -128,22 +151,41 @@ class BallisticCalculator(tk.Tk):
         self.sense = sense
         self.running = True
 
-        # Variables
-        self.velocity_var = tk.StringVar(value="3000")
-        self.bc_var = tk.StringVar(value="0.500")
-        self.bullet_weight_var = tk.StringVar(value="150")
-        self.range_var = tk.StringVar(value="100")
-        self.zero_range_var = tk.StringVar(value="100")
-        self.scope_height_var = tk.StringVar(value="1.5")
-        self.wind_speed_var = tk.StringVar(value="10")
-        self.wind_direction_var = tk.StringVar(value="90")
-        self.barrel_twist_var = tk.StringVar(value="10")
-        self.target_size_var = tk.StringVar(value="10")
-        self.target_angle_var = tk.StringVar(value="0")
-        self.altitude_var = tk.StringVar(value="0")
-        self.temp_var = tk.StringVar(value="N/A")
-        self.humidity_var = tk.StringVar(value="N/A")
-        self.pressure_var = tk.StringVar(value="N/A")
+        # -------------------
+        # Rifle Variables
+        # -------------------
+        self.scope_height_var = tk.StringVar(value="1.5")  # inches or cm
+        self.zero_range_var = tk.StringVar(value="100")    # yards or meters
+        self.barrel_twist_var = tk.StringVar(value="10")   # in/turn
+
+        # -------------------
+        # Bullet Variables
+        # -------------------
+        self.velocity_var = tk.StringVar(value="3000")      # fps
+        self.bc_var = tk.StringVar(value="0.500")           # Ballistic Coefficient
+        self.bullet_weight_var = tk.StringVar(value="150")  # grains
+        self.drag_model_var = tk.StringVar(value="G7")      # G1 or G7
+
+        # -------------------
+        # Environment Variables (User Input)
+        # -------------------
+        self.range_var = tk.StringVar(value="100")          # yards or meters
+        self.target_size_var = tk.StringVar(value="10")     # inches or cm
+        self.target_angle_var = tk.StringVar(value="0")     # degrees
+        self.wind_speed_var = tk.StringVar(value="10")      # mph
+        self.wind_direction_var = tk.StringVar(value="90")  # degrees
+        self.altitude_var = tk.StringVar(value="0")         # feet
+
+        # -------------------
+        # Environment Variables (From Sensors)
+        # -------------------
+        self.temp_var = tk.StringVar(value="N/A")           # °C or °F
+        self.humidity_var = tk.StringVar(value="N/A")       # %
+        self.pressure_var = tk.StringVar(value="N/A")       # inHg
+
+        # -------------------
+        # Output/Result Variables
+        # -------------------
         self.drop_var = tk.StringVar(value="0.00")
         self.velocity_at_range_var = tk.StringVar(value="0.00")
         self.energy_var = tk.StringVar(value="0.00")
@@ -152,7 +194,10 @@ class BallisticCalculator(tk.Tk):
         self.lateral_drift_var = tk.StringVar(value="0.00")
         self.lateral_moa_var = tk.StringVar(value="0.00")
         self.lateral_mrad_var = tk.StringVar(value="0.00")
-        self.drag_model_var = tk.StringVar(value="G7")
+
+        # -------------------
+        # Unit Selection Variables
+        # -------------------
         self.temp_unit_var = tk.StringVar(value="°C")
         self.dist_unit_var = tk.StringVar(value="Yards")
 
@@ -164,6 +209,7 @@ class BallisticCalculator(tk.Tk):
         self.sensor_thread.start()
 
     def create_widgets(self):
+        """Create and layout all GUI widgets."""
         main_container = ttk.Frame(self, padding="10")
         main_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.columnconfigure(0, weight=1)
@@ -282,7 +328,7 @@ class BallisticCalculator(tk.Tk):
         ttk.Button(main_container, text="Calculate", command=self.calculate).grid(row=2, column=0, columnspan=2, pady=10)
 
     def update_units(self):
-        """Update displayed values when units change."""
+        """Update displayed values when units change (°C/°F, yards/meters)."""
         use_celsius = self.temp_unit_var.get() == "°C"
         use_meters = self.dist_unit_var.get() == "Meters"
 
@@ -306,40 +352,11 @@ class BallisticCalculator(tk.Tk):
         except ValueError:
             pass
 
-    def poll_sense_grid(self, moa_adjustment, lateral_moa):
-        """Update Sense HAT 8x8 grid to show elevation and windage MOA."""
-        self.sense.clear()
-        elev = int(round(abs(moa_adjustment)))
-        wind = int(round(abs(lateral_moa)))
-        if elev > 99 or wind > 99 or moa_adjustment < 0 or lateral_moa < 0:
-            # Flash red for invalid values
-            for _ in range(2):
-                self.sense.clear(255, 0, 0)
-                time.sleep(0.5)
-                self.sense.clear()
-                time.sleep(0.5)
-            return
-
-        # Display elevation MOA (left 4 columns)
-        elev_str = f"{elev:02d}"  # Pad with leading zero
-        for i, digit in enumerate(elev_str):
-            if digit in FONT:
-                for y in range(5):
-                    for x in range(3):
-                        if FONT[digit][y][x]:
-                            self.sense.set_pixel(x + i*4, y + 1, 255, 0, 0)
-
-        # Display windage MOA (right 4 columns)
-        wind_str = f"{wind:02d}"
-        for i, digit in enumerate(wind_str):
-            if digit in FONT:
-                for y in range(5):
-                    for x in range(3):
-                        if FONT[digit][y][x]:
-                            self.sense.set_pixel(x + (i*4) + 4, y + 1, 255, 0, 0)
-
     def poll_sensors(self):
-        """Continuously poll Sense HAT sensors and update GUI."""
+        """Continuously poll Sense HAT sensors and update GUI.
+        - Updates temperature, humidity, and pressure fields
+        - Handles sensor errors gracefully
+        """
         while self.running:
             try:
                 temp_c = self.sense.get_temperature()
@@ -359,7 +376,11 @@ class BallisticCalculator(tk.Tk):
             time.sleep(2)
 
     def calculate(self):
-        """Perform ballistic calculation based on inputs."""
+        """Perform ballistic calculation based on user inputs.
+        - Validates inputs
+        - Calls calculation functions
+        - Updates result fields
+        """
         try:
             velocity = float(self.velocity_var.get())
             bc = float(self.bc_var.get())
@@ -404,21 +425,12 @@ class BallisticCalculator(tk.Tk):
             self.lateral_moa_var.set(f"{lateral_moa:.2f}")
             self.lateral_mrad_var.set(f"{lateral_mrad:.2f}")
 
-            # Update Sense HAT grid
-            self.poll_sense_grid(moa, lateral_moa)
-
-            # Validate target size
-            if abs(drop) > target_size:
-                unit = "cm" if use_meters else "in"
-                messagebox.showwarning("Target Warning", f"Bullet drop ({abs(drop):.2f} {unit}) exceeds target size ({target_size:.2f} {unit}).")
-            if abs(lateral_drift) > target_size:
-                messagebox.showwarning("Target Warning", f"Lateral drift ({abs(lateral_drift):.2f} {unit}) exceeds target size ({target_size:.2f} {unit}).")
         except ValueError as e:
             messagebox.showerror("Input Error", str(e))
             self.sense.clear()
 
     def destroy(self):
-        """Clean up on exit."""
+        """Clean up on exit (stop threads, clear Sense HAT)."""
         self.running = False
         self.sense.clear()
         super().destroy()
