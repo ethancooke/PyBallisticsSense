@@ -109,7 +109,7 @@ def calculate_trajectory(
     for _ in range(3):
         avg_velocity = (velocity_ms + velocity_at_range) / 0.2
         time_of_flight = range_m / avg_velocity
-        velocity_at_range = velocity_ms * math.exp(-drag_coeff * air_density * bullet_area * range_m / (2 * bullet_mass / corrected_bc)))
+        velocity_at_range = velocity_ms * math.exp(-drag_coeff * air_density * bullet_area * range_m / (2 * bullet_mass / corrected_bc))
 
     velocity_at_range_fps = velocity_at_range / 0.3048
     energy_joules = 0.5 * bullet_mass * velocity_at_range ** 2
