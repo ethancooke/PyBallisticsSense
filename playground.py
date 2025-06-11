@@ -20,6 +20,7 @@ from sense_hat import SenseHat
 import threading
 import time
 import math
+import json
 
 # Initialize Sense HAT
 sense = SenseHat()
@@ -151,55 +152,59 @@ class BallisticCalculator(tk.Tk):
         self.sense = sense
         self.running = True
 
+        # Load defaults from external JSON file
+        with open("defaults.json", "r") as f:
+            defaults = json.load(f)
+
         # -------------------
         # Rifle Variables
         # -------------------
-        self.scope_height_var = tk.StringVar(value="1.5")  # inches or cm
-        self.zero_range_var = tk.StringVar(value="100")    # yards or meters
-        self.barrel_twist_var = tk.StringVar(value="10")   # in/turn
+        self.scope_height_var = tk.StringVar(value=str(defaults["rifle"]["scope_height"]))
+        self.zero_range_var = tk.StringVar(value=str(defaults["rifle"]["zero_range"]))
+        self.barrel_twist_var = tk.StringVar(value=str(defaults["rifle"]["barrel_twist"]))
 
         # -------------------
         # Bullet Variables
         # -------------------
-        self.velocity_var = tk.StringVar(value="3000")      # fps
-        self.bc_var = tk.StringVar(value="0.500")           # Ballistic Coefficient
-        self.bullet_weight_var = tk.StringVar(value="150")  # grains
-        self.drag_model_var = tk.StringVar(value="G7")      # G1 or G7
+        self.velocity_var = tk.StringVar(value=str(defaults["bullet"]["velocity"]))
+        self.bc_var = tk.StringVar(value=str(defaults["bullet"]["bc"]))
+        self.bullet_weight_var = tk.StringVar(value=str(defaults["bullet"]["weight"]))
+        self.drag_model_var = tk.StringVar(value=defaults["bullet"]["drag_model"])
 
         # -------------------
         # Environment Variables (User Input)
         # -------------------
-        self.range_var = tk.StringVar(value="100")          # yards or meters
-        self.target_size_var = tk.StringVar(value="10")     # inches or cm
-        self.target_angle_var = tk.StringVar(value="0")     # degrees
-        self.wind_speed_var = tk.StringVar(value="10")      # mph
-        self.wind_direction_var = tk.StringVar(value="90")  # degrees
-        self.altitude_var = tk.StringVar(value="0")         # feet
+        self.range_var = tk.StringVar(value=str(defaults["environment_user"]["range"]))
+        self.target_size_var = tk.StringVar(value=str(defaults["environment_user"]["target_size"]))
+        self.target_angle_var = tk.StringVar(value=str(defaults["environment_user"]["target_angle"]))
+        self.wind_speed_var = tk.StringVar(value=str(defaults["environment_user"]["wind_speed"]))
+        self.wind_direction_var = tk.StringVar(value=str(defaults["environment_user"]["wind_direction"]))
+        self.altitude_var = tk.StringVar(value=str(defaults["environment_user"]["altitude"]))
 
         # -------------------
         # Environment Variables (From Sensors)
         # -------------------
-        self.temp_var = tk.StringVar(value="N/A")           # °C or °F
-        self.humidity_var = tk.StringVar(value="N/A")       # %
-        self.pressure_var = tk.StringVar(value="N/A")       # inHg
+        self.temp_var = tk.StringVar(value=defaults["environment_sensor"]["temp"])
+        self.humidity_var = tk.StringVar(value=defaults["environment_sensor"]["humidity"])
+        self.pressure_var = tk.StringVar(value=defaults["environment_sensor"]["pressure"])
 
         # -------------------
         # Output/Result Variables
         # -------------------
-        self.drop_var = tk.StringVar(value="0.00")
-        self.velocity_at_range_var = tk.StringVar(value="0.00")
-        self.energy_var = tk.StringVar(value="0.00")
-        self.moa_var = tk.StringVar(value="0.00")
-        self.mrad_var = tk.StringVar(value="0.00")
-        self.lateral_drift_var = tk.StringVar(value="0.00")
-        self.lateral_moa_var = tk.StringVar(value="0.00")
-        self.lateral_mrad_var = tk.StringVar(value="0.00")
+        self.drop_var = tk.StringVar(value=str(defaults["output"]["drop"]))
+        self.velocity_at_range_var = tk.StringVar(value=str(defaults["output"]["velocity_at_range"]))
+        self.energy_var = tk.StringVar(value=str(defaults["output"]["energy"]))
+        self.moa_var = tk.StringVar(value=str(defaults["output"]["moa"]))
+        self.mrad_var = tk.StringVar(value=str(defaults["output"]["mrad"]))
+        self.lateral_drift_var = tk.StringVar(value=str(defaults["output"]["lateral_drift"]))
+        self.lateral_moa_var = tk.StringVar(value=str(defaults["output"]["lateral_moa"]))
+        self.lateral_mrad_var = tk.StringVar(value=str(defaults["output"]["lateral_mrad"]))
 
         # -------------------
         # Unit Selection Variables
         # -------------------
-        self.temp_unit_var = tk.StringVar(value="°C")
-        self.dist_unit_var = tk.StringVar(value="Yards")
+        self.temp_unit_var = tk.StringVar(value=defaults["units"]["temp_unit"])
+        self.dist_unit_var = tk.StringVar(value=defaults["units"]["dist_unit"])
 
         # GUI Layout
         self.create_widgets()

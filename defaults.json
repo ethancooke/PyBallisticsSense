@@ -1,0 +1,40 @@
+{
+  "rifle": {
+    "scope_height": 1.5,
+    "zero_range": 100,
+    "barrel_twist": 10
+  },
+  "bullet": {
+    "velocity": 3000,
+    "bc": 0.5,
+    "weight": 150,
+    "drag_model": "G7"
+  },
+  "environment_user": {
+    "range": 100,
+    "target_size": 10,
+    "target_angle": 0,
+    "wind_speed": 10,
+    "wind_direction": 90,
+    "altitude": 0
+  },
+  "environment_sensor": {
+    "temp": "N/A",
+    "humidity": "N/A",
+    "pressure": "N/A"
+  },
+  "output": {
+    "drop": 0.0,
+    "velocity_at_range": 0.0,
+    "energy": 0.0,
+    "moa": 0.0,
+    "mrad": 0.0,
+    "lateral_drift": 0.0,
+    "lateral_moa": 0.0,
+    "lateral_mrad": 0.0
+  },
+  "units": {
+    "temp_unit": "°C",
+    "dist_unit": "Yards"
+  }
+}
