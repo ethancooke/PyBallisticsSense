@@ -71,8 +71,86 @@ class BallisticCalculator(tk.Tk):
         self.unit_dist = self.vars["dist_unit"]
 
     def create_widgets(self):
-        # ...existing code for widget creation, using the new variable names...
-        pass
+        # Build the GUI layout
+        main_container = ttk.Frame(self, padding="10")
+        main_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+
+        frames = {
+            'rifle': ttk.LabelFrame(main_container, text="Rifle Details", padding="5"),
+            'bullet': ttk.LabelFrame(main_container, text="Bullet Details", padding="5"),
+            'env': ttk.LabelFrame(main_container, text="Environment Details", padding="5"),
+            'result': ttk.LabelFrame(main_container, text="Resulting Calculations", padding="5")
+        }
+        frames['rifle'].grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        frames['bullet'].grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+        frames['env'].grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        frames['result'].grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
+
+        main_container.columnconfigure(0, weight=1)
+        main_container.columnconfigure(1, weight=1)
+        main_container.rowconfigure(0, weight=1)
+        main_container.rowconfigure(1, weight=1)
+
+        def add_labeled_entry(frame, label, variable, row, col=0, label_kwargs=None, entry_kwargs=None):
+            label_kwargs = label_kwargs or {}
+            entry_kwargs = entry_kwargs or {}
+            ttk.Label(frame, text=label, **label_kwargs).grid(row=row, column=col, sticky=tk.W)
+            ttk.Entry(frame, textvariable=variable, **entry_kwargs).grid(row=row, column=col+1, sticky=(tk.W, tk.E))
+            frame.columnconfigure(col+1, weight=1)
+
+        # Rifle Details
+        add_labeled_entry(frames['rifle'], "Scope Height:", self.rifle_scope_height, 0)
+        add_labeled_entry(frames['rifle'], "Zero Range:", self.rifle_zero_range, 1)
+        add_labeled_entry(frames['rifle'], "Barrel Twist (in/turn):", self.rifle_barrel_twist, 2)
+
+        # Bullet Details
+        add_labeled_entry(frames['bullet'], "Muzzle Velocity (fps):", self.bullet_velocity, 0)
+        add_labeled_entry(frames['bullet'], "Ballistic Coefficient:", self.bullet_bc, 1)
+        add_labeled_entry(frames['bullet'], "Bullet Weight (gr):", self.bullet_weight, 2)
+        ttk.Label(frames['bullet'], text="Drag Model:").grid(row=3, column=0, sticky=tk.W)
+        ttk.Radiobutton(frames['bullet'], text="G1", variable=self.bullet_drag_model, value="G1").grid(row=3, column=1, sticky=tk.W)
+        ttk.Radiobutton(frames['bullet'], text="G7", variable=self.bullet_drag_model, value="G7").grid(row=3, column=2, sticky=tk.W)
+        frames['bullet'].columnconfigure(1, weight=1)
+        frames['bullet'].columnconfigure(2, weight=1)
+
+        # Environment Details
+        add_labeled_entry(frames['env'], "Range:", self.env_range, 0)
+        add_labeled_entry(frames['env'], "Target Size:", self.env_target_size, 1)
+        add_labeled_entry(frames['env'], "Target Angle (deg):", self.env_target_angle, 2)
+        add_labeled_entry(frames['env'], "Wind Speed (mph):", self.env_wind_speed, 3)
+        add_labeled_entry(frames['env'], "Wind Direction (deg):", self.env_wind_direction, 4)
+        add_labeled_entry(frames['env'], "Altitude (ft):", self.env_altitude, 5)
+        ttk.Label(frames['env'], text="Temperature:").grid(row=6, column=0, sticky=tk.W)
+        ttk.Label(frames['env'], textvariable=self.env_temp).grid(row=6, column=1, sticky=tk.W)
+        ttk.Label(frames['env'], text="Humidity (%):").grid(row=7, column=0, sticky=tk.W)
+        ttk.Label(frames['env'], textvariable=self.env_humidity).grid(row=7, column=1, sticky=tk.W)
+        ttk.Label(frames['env'], text="Pressure (inHg):").grid(row=8, column=0, sticky=tk.W)
+        ttk.Label(frames['env'], textvariable=self.env_pressure).grid(row=8, column=1, sticky=tk.W)
+        ttk.Label(frames['env'], text="Units:").grid(row=9, column=0, sticky=tk.W)
+        ttk.Radiobutton(frames['env'], text="°C", variable=self.unit_temp, value="°C", command=self.update_units).grid(row=9, column=1, sticky=tk.W)
+        ttk.Radiobutton(frames['env'], text="°F", variable=self.unit_temp, value="°F", command=self.update_units).grid(row=9, column=2, sticky=tk.W)
+        ttk.Radiobutton(frames['env'], text="Yards", variable=self.unit_dist, value="Yards", command=self.update_units).grid(row=9, column=3, sticky=tk.W)
+        ttk.Radiobutton(frames['env'], text="Meters", variable=self.unit_dist, value="Meters", command=self.update_units).grid(row=9, column=4, sticky=tk.W)
+        for i in range(1, 5):
+            frames['env'].columnconfigure(i, weight=1)
+
+        def add_labeled_result(frame, label, variable, row, col=0):
+            ttk.Label(frame, text=label).grid(row=row, column=col, sticky=tk.W)
+            ttk.Label(frame, textvariable=variable).grid(row=row, column=col+1, sticky=tk.W)
+            frame.columnconfigure(col+1, weight=1)
+        add_labeled_result(frames['result'], "Bullet Drop:", self.result_drop, 0)
+        add_labeled_result(frames['result'], "Velocity at Range (fps):", self.result_velocity_at_range, 1)
+        add_labeled_result(frames['result'], "Energy at Range (ft-lbs):", self.result_energy, 2)
+        add_labeled_result(frames['result'], "Elevation Adjustment (MOA):", self.result_moa, 3)
+        add_labeled_result(frames['result'], "Elevation Adjustment (MRAD):", self.result_mrad, 4)
+        add_labeled_result(frames['result'], "Lateral Drift:", self.result_lateral_drift, 5)
+        add_labeled_result(frames['result'], "Windage Adjustment (MOA):", self.result_lateral_moa, 6)
+        add_labeled_result(frames['result'], "Windage Adjustment (MRAD):", self.result_lateral_mrad, 7)
+
+        ttk.Button(main_container, text="Calculate", command=self.calculate).grid(row=2, column=0, columnspan=2, pady=10)
+        # ...existing code...
 
     def update_units(self):
         use_celsius = self.unit_temp.get() == "°C"
