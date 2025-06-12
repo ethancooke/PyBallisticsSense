@@ -1,3 +1,10 @@
+# This file is now split into modules:
+# - ballistics.py: all calculation and conversion functions
+# - sensehat_io.py: all Sense HAT reading/writing
+# - gui.py: the GUI application
+#
+# To run the application, use gui.py as your entry point.
+
 #!/usr/bin/python3
 # Ballistic Calculator for Raspberry Pi with Sense HAT
 # ---------------------------------------------------
